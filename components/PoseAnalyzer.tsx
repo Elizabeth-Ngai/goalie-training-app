@@ -7,46 +7,13 @@ import {
   DrawingUtils,
 } from "@mediapipe/tasks-vision";
 
-type Status = "loading-model" | "idle" | "video-ready" | "pose" | "no-pose";
-
-const STATUS_CONFIG: Record<
-  Status,
-  { label: string; description: string; dot: string }
-> = {
-  "loading-model": {
-    label: "Loading AI model",
-    description: "Setting up on-device pose detection…",
-    dot: "bg-slate-400 animate-pulse",
-  },
-  idle: {
-    label: "Ready",
-    description: "Upload a short clip to begin analysis.",
-    dot: "bg-slate-400",
-  },
-  "video-ready": {
-    label: "Video loaded",
-    description: "Press play on the video to start analyzing your form.",
-    dot: "bg-blue-500",
-  },
-  pose: {
-    label: "Pose detected",
-    description: "Tracking stance and movement in real time.",
-    dot: "bg-emerald-500",
-  },
-  "no-pose": {
-    label: "No pose detected",
-    description: "Make sure your full body is visible in frame.",
-    dot: "bg-amber-500",
-  },
-};
-
 export default function PoseAnalyzer() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const poseLandmarkerRef = useRef<PoseLandmarker | null>(null);
 
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
-  const [status, setStatus] = useState<Status>("loading-model");
+  const [feedback, setFeedback] = useState<string>("Upload a video to begin.");
 
   useEffect(() => {
     async function loadModel() {
@@ -66,8 +33,6 @@ export default function PoseAnalyzer() {
           numPoses: 1,
         }
       );
-
-      setStatus((current) => (current === "loading-model" ? "idle" : current));
     }
 
     loadModel();
@@ -78,7 +43,7 @@ export default function PoseAnalyzer() {
     if (!file) return;
 
     setVideoUrl(URL.createObjectURL(file));
-    setStatus("video-ready");
+    setFeedback("Video uploaded. Press play to analyze.");
   }
 
   async function analyzeFrame() {
@@ -102,21 +67,16 @@ export default function PoseAnalyzer() {
 
     if (results.landmarks.length > 0) {
       for (const landmarks of results.landmarks) {
-        drawingUtils.drawLandmarks(landmarks, {
-          color: "#34d399",
-          fillColor: "#10b981",
-          radius: 3,
-        });
+        drawingUtils.drawLandmarks(landmarks);
         drawingUtils.drawConnectors(
           landmarks,
-          PoseLandmarker.POSE_CONNECTIONS,
-          { color: "#34d399", lineWidth: 2 }
+          PoseLandmarker.POSE_CONNECTIONS
         );
       }
 
-      setStatus("pose");
+      setFeedback("Pose detected. Next, we can score stance and movement.");
     } else {
-      setStatus("no-pose");
+      setFeedback("No pose detected. Make sure the full body is visible.");
     }
 
     if (!video.paused && !video.ended) {
@@ -124,51 +84,30 @@ export default function PoseAnalyzer() {
     }
   }
 
-  const config = STATUS_CONFIG[status];
-
   return (
     <div className="space-y-6">
-      <label
-        className={`inline-flex items-center gap-2 rounded-full px-6 py-3 font-semibold shadow-sm transition ${
-          status === "loading-model"
-            ? "cursor-not-allowed bg-slate-200 text-slate-400"
-            : "cursor-pointer bg-emerald-600 text-white hover:bg-emerald-500"
-        }`}
-      >
-        <span>📹</span>
-        <span>{videoUrl ? "Choose a different video" : "Upload training video"}</span>
-        <input
-          type="file"
-          accept="video/*"
-          onChange={handleUpload}
-          disabled={status === "loading-model"}
-          className="hidden"
-        />
-      </label>
+      <input type="file" accept="video/*" onChange={handleUpload} />
 
       {videoUrl && (
-        <div className="relative w-full max-w-2xl overflow-hidden rounded-2xl border border-slate-200 bg-black shadow-lg">
+        <div className="relative w-full max-w-3xl">
           <video
             ref={videoRef}
             src={videoUrl}
             controls
             onPlay={analyzeFrame}
-            className="w-full"
+            className="w-full rounded-xl"
           />
 
           <canvas
             ref={canvasRef}
-            className="pointer-events-none absolute left-0 top-0 h-full w-full"
+            className="absolute left-0 top-0 w-full h-full pointer-events-none"
           />
         </div>
       )}
 
-      <div className="flex max-w-2xl items-start gap-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <span className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${config.dot}`} />
-        <div>
-          <p className="font-semibold text-slate-900">{config.label}</p>
-          <p className="text-sm text-slate-600">{config.description}</p>
-        </div>
+      <div className="rounded-xl bg-slate-800 p-4">
+        <h2 className="font-semibold mb-2">AI Feedback</h2>
+        <p>{feedback}</p>
       </div>
     </div>
   );
