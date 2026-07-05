@@ -18,9 +18,6 @@ const steps = [
 export default function Home() {
   return (
     <main className="mx-auto max-w-3xl px-6 py-20 text-center">
-      <span className="inline-block rounded-full border border-border bg-surface px-3 py-1 text-xs font-medium tracking-wide text-muted uppercase">
-        AI-Powered Coaching
-      </span>
 
       <h1 className="mt-6 text-4xl font-bold tracking-tight sm:text-5xl">
         Sharpen your ready stance
