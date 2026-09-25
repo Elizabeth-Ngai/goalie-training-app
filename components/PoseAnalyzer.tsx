@@ -1,8 +1,11 @@
 "use client";
 
 import { analyzeReadyStance } from "@/lib/feedbackRules";
+import { getTopPriorities } from "@/lib/priorities";
+import { buildRecommendations } from "@/lib/recommendations";
 import { Scorecard as ScorecardData } from "@/lib/types";
 import Scorecard from "@/components/Scorecard";
+import RecommendationsPanel from "@/components/RecommendationsPanel";
 import VideoClassificationCard, {
     ClassificationPrediction,
     ClassificationStatus,
@@ -238,7 +241,14 @@ export default function PoseAnalyzer() {
             )}
 
             {scorecard ? (
-                <Scorecard scorecard={scorecard} />
+                <>
+                    <Scorecard scorecard={scorecard} />
+                    <RecommendationsPanel
+                        recommendations={buildRecommendations(
+                            getTopPriorities(scorecard.ratings)
+                        )}
+                    />
+                </>
             ) : (
                 <div className="rounded-xl border border-border bg-surface p-5">
                     <h2 className="font-semibold">Ready Stance Scorecard</h2>
