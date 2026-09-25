@@ -32,6 +32,11 @@ export default function PoseAnalyzer() {
         "Loading pose model..."
     );
 
+    // The scorecard updates every video frame during playback, which makes
+    // recommendations reshuffle too fast to read. We only show
+    // recommendations once the video has finished playing.
+    const [videoEnded, setVideoEnded] = useState(false);
+
     // AI video classification state.
     const [classificationStatus, setClassificationStatus] =
         useState<ClassificationStatus>("idle");
@@ -82,6 +87,7 @@ export default function PoseAnalyzer() {
         setVideoUrl(URL.createObjectURL(file));
         setFileName(file.name);
         setScorecard(null);
+        setVideoEnded(false);
         setStatusMessage("Video loaded. Press play to analyze.");
 
         // Reset classification state for the new video.
@@ -229,7 +235,11 @@ export default function PoseAnalyzer() {
                         src={videoUrl}
                         controls
                         onLoadedData={classifyVideo}
-                        onPlay={analyzeFrame}
+                        onPlay={() => {
+                            setVideoEnded(false);
+                            analyzeFrame();
+                        }}
+                        onEnded={() => setVideoEnded(true)}
                         className="w-full"
                     />
 
@@ -243,11 +253,21 @@ export default function PoseAnalyzer() {
             {scorecard ? (
                 <>
                     <Scorecard scorecard={scorecard} />
-                    <RecommendationsPanel
-                        recommendations={buildRecommendations(
-                            getTopPriorities(scorecard.ratings)
-                        )}
-                    />
+                    {videoEnded ? (
+                        <RecommendationsPanel
+                            recommendations={buildRecommendations(
+                                getTopPriorities(scorecard.ratings)
+                            )}
+                        />
+                    ) : (
+                        <div className="rounded-xl border border-border bg-surface p-5">
+                            <h2 className="font-semibold">Recommended for You</h2>
+                            <p className="mt-3 text-sm text-muted">
+                                Recommendations will appear here once the video
+                                finishes playing.
+                            </p>
+                        </div>
+                    )}
                 </>
             ) : (
                 <div className="rounded-xl border border-border bg-surface p-5">
