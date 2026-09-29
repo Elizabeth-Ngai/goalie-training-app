@@ -16,13 +16,53 @@ import {
   GoalieReportSchema,
   PROVIDER_ANALYSIS_JSON_SCHEMA,
   PlayerInfo,
+  ProviderAnalysis,
   ProviderAnalysisSchema,
   ProviderId,
   ProviderResult,
+  ReportPriority,
   TRAINING_PLAN_JSON_SCHEMA,
   TrainingPlan,
   TrainingPlanSchema,
 } from "@/lib/schemas";
+
+// Turn a priority title into a stable, URL-safe kebab-case slug, e.g.
+// "First-Step Efficiency" -> "first-step-efficiency". These IDs are the
+// handle Phase 2 will use to link training-plan drills to priorities.
+function slugify(title: string): string {
+  const slug = title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return slug || "priority";
+}
+
+// Assign each priority a deterministic, title-derived id, de-duplicating with
+// numeric suffixes so ids are unique within a single report regardless of
+// what the model returned. Centralizes all id generation for both the
+// synthesis and fallback paths.
+function normalizePriorityIds(priorities: ReportPriority[]): ReportPriority[] {
+  const seen = new Map<string, number>();
+  return priorities.map((priority) => {
+    const base = slugify(priority.title);
+    const count = seen.get(base) ?? 0;
+    seen.set(base, count + 1);
+    const id = count === 0 ? base : `${base}-${count + 1}`;
+    return { ...priority, id };
+  });
+}
+
+// Split a paragraph-ish string into short one-sentence bullets. Used only by
+// the deterministic fallback (buildReportFromAnalysis), which has plain
+// strings from a single provider analysis rather than the bulleted arrays the
+// synthesis model produces. Falls back to the whole string as one bullet.
+function toBullets(text: string): string[] {
+  const parts = text
+    .split(/(?<=[.!?])\s+/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+  return parts.length > 0 ? parts : [text];
+}
 
 export type RawFrame = { timestamp: number; base64: string };
 
@@ -263,8 +303,15 @@ export async function callSynthesis(
     const parsed = GoalieReportSchema.safeParse(JSON.parse(content));
     if (!parsed.success) throw new Error("Malformed synthesis response");
 
+    // Overwrite the model's ids with deterministic, title-derived, unique
+    // slugs so we don't depend on the LLM producing clean/unique ids.
+    const report: GoalieReport = {
+      ...parsed.data,
+      topPriorities: normalizePriorityIds(parsed.data.topPriorities),
+    };
+
     console.log("[providers] synthesis: ok");
-    return { ok: true, report: parsed.data };
+    return { ok: true, report };
   } catch (error) {
     console.error("[providers] synthesis: failed");
     return { ok: false, error: (error as Error).message };
@@ -279,29 +326,58 @@ export async function callSynthesis(
 // analysis lacks the technical issues needed to populate the required
 // topPriorities. sourceCount is forced to 1 since only one analysis shaped
 // this report, which also surfaces the UI's "partial analysis" note.
+const CATEGORY_TITLES: Record<string, string> = {
+  positioning: "Positioning",
+  setPosition: "Set Position",
+  footwork: "Footwork",
+  decisionMaking: "Decision Making",
+  diving: "Diving",
+  handling: "Handling",
+  landing: "Landing",
+  recovery: "Recovery",
+  distribution: "Distribution",
+};
+
 export function buildReportFromAnalysis(
-  analysis: import("@/lib/schemas").ProviderAnalysis
+  analysis: ProviderAnalysis
 ): GoalieReport | null {
   if (analysis.technicalIssues.length === 0) return null;
 
-  const topPriorities = analysis.technicalIssues.slice(0, 3).map((issue) => ({
-    category: issue.category,
-    timestamp: issue.timestamp,
-    observation: issue.observation,
-    whyItMatters: issue.whyItMatters,
-    howToImprove: issue.recommendation,
-    recommendedDrill: analysis.recommendedDrills[0] ?? {
-      name: `Targeted ${issue.category} drill`,
-      purpose: issue.recommendation,
-    },
+  const topPriorities = normalizePriorityIds(
+    analysis.technicalIssues.slice(0, 3).map((issue) => ({
+      id: "", // assigned by normalizePriorityIds
+      title: CATEGORY_TITLES[issue.category] ?? issue.category,
+      category: issue.category,
+      timestamp: issue.timestamp,
+      observations: toBullets(issue.observation),
+      whyItMatters: toBullets(issue.whyItMatters),
+      howToImprove: toBullets(issue.recommendation),
+      recommendedDrill: analysis.recommendedDrills[0] ?? {
+        name: `Targeted ${CATEGORY_TITLES[issue.category] ?? issue.category} drill`,
+        purpose: issue.recommendation,
+      },
+    }))
+  );
+
+  const strengths = analysis.strengths.map((strength) => ({
+    title: CATEGORY_TITLES[strength.category] ?? strength.category,
+    category: strength.category,
+    timestamp: strength.timestamp,
+    points: toBullets(strength.observation),
+  }));
+
+  const keyMoments = analysis.keyMoments.map((moment) => ({
+    timestamp: moment.timestamp,
+    label: "",
+    description: moment.description,
   }));
 
   const candidate = {
     summary: analysis.summary,
-    strengths: analysis.strengths,
+    strengths,
     technicalIssues: analysis.technicalIssues,
     topPriorities,
-    keyMoments: analysis.keyMoments,
+    keyMoments,
     recommendedDrills: analysis.recommendedDrills,
     sourceCount: 1 as const,
   };

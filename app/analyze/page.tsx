@@ -1,7 +1,7 @@
 "use client";
 
 import { upload } from "@vercel/blob/client";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { extractFrames } from "@/lib/extractFrames";
 import { GoalieReport as GoalieReportData, PlayerInfo, TrainingPlan } from "@/lib/schemas";
 import GoalieReport from "@/components/GoalieReport";
@@ -44,6 +44,20 @@ export default function AnalyzePage() {
   const [plan, setPlan] = useState<TrainingPlan | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [errorContext, setErrorContext] = useState<"analysis" | "plan" | null>(null);
+
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  // Seek the existing video to a moment from the analysis and play it. Reused
+  // for every "Watch 00:04.2" control in the report. scrollIntoView with
+  // block:"nearest" is a no-op when the video is already visible (desktop
+  // sticky column) and brings it into view when it isn't (mobile stacked).
+  function seekTo(seconds: number) {
+    const video = videoRef.current;
+    if (!video) return;
+    video.currentTime = seconds;
+    video.play().catch(() => {});
+    video.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
 
   async function runAnalysis(url: string) {
     setStage("analyzing");
@@ -138,7 +152,7 @@ export default function AnalyzePage() {
   }
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-12">
+    <main className="mx-auto max-w-5xl px-6 py-12">
       <h1 className="text-3xl font-bold tracking-tight">AI Goalie</h1>
       <p className="mt-2 text-muted">
         Upload a goalkeeper training clip to get a personalized coaching
@@ -181,42 +195,45 @@ export default function AnalyzePage() {
           </div>
         )}
 
+        {/* Review area: video + analysis report side by side on desktop
+            (video sticky so it stays visible while reading), stacked on
+            mobile. A single <video> element is kept mounted across stages so
+            seeking never reloads it. */}
         {videoUrl && (
-          <div className="relative w-full overflow-hidden rounded-xl border border-border bg-black">
-            <video src={videoUrl} controls className="w-full" />
+          <div className="grid gap-6 lg:grid-cols-2 lg:gap-8">
+            <div className="lg:sticky lg:top-6 lg:self-start">
+              <div className="relative w-full overflow-hidden rounded-xl border border-border bg-black">
+                <video ref={videoRef} src={videoUrl} controls className="w-full" />
+              </div>
+            </div>
+
+            <div>
+              {stage === "analyzing" && (
+                <AnalysisLoading label="Analyzing with AI Goalie..." />
+              )}
+              {report && <GoalieReport report={report} onSeek={seekTo} />}
+              {stage === "error" && errorContext === "analysis" && errorMessage && (
+                <ErrorPanel message={errorMessage} onRetry={handleRetry} />
+              )}
+            </div>
           </div>
         )}
 
-        {videoUrl && stage === "analyzing" && (
-          <AnalysisLoading label="Analyzing with AI Goalie..." />
+        {/* Player form, training plan, and plan-stage states render full-width
+            below the review grid — training is intentionally NOT locked into
+            the narrow right column (Phase 2 redesigns it as a wider view). */}
+        {stage === "analysis-ready" && (
+          <PlayerInfoForm onSubmit={handlePlayerInfoSubmit} submitting={false} />
         )}
 
-        {videoUrl && stage === "analysis-ready" && report && (
-          <>
-            <GoalieReport report={report} />
-            <PlayerInfoForm onSubmit={handlePlayerInfoSubmit} submitting={false} />
-          </>
+        {stage === "generating-plan" && (
+          <AnalysisLoading label="Building your 7-day training plan..." />
         )}
 
-        {videoUrl && stage === "generating-plan" && report && (
-          <>
-            <GoalieReport report={report} />
-            <AnalysisLoading label="Building your 7-day training plan..." />
-          </>
-        )}
+        {stage === "done" && plan && <TrainingPlanView plan={plan} />}
 
-        {videoUrl && stage === "done" && report && plan && (
-          <>
-            <GoalieReport report={report} />
-            <TrainingPlanView plan={plan} />
-          </>
-        )}
-
-        {videoUrl && stage === "error" && errorMessage && (
-          <>
-            {errorContext === "plan" && report && <GoalieReport report={report} />}
-            <ErrorPanel message={errorMessage} onRetry={handleRetry} />
-          </>
+        {stage === "error" && errorContext === "plan" && errorMessage && (
+          <ErrorPanel message={errorMessage} onRetry={handleRetry} />
         )}
       </div>
     </main>

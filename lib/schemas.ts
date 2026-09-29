@@ -119,34 +119,92 @@ const TECHNICAL_ISSUE_ITEM_JSON_SCHEMA = {
   additionalProperties: false,
 };
 
-export const PriorityItemSchema = z.object({
+// ---------------------------------------------------------------------------
+// UI-friendly report item types
+//
+// These are the shapes rendered in the final AI Goalie report. They are
+// deliberately SEPARATE from the per-provider analysis item types above
+// (StrengthItem / TechnicalIssueItem / KeyMoment) so the report can be
+// concise and scannable — short titles + arrays of one-sentence bullets —
+// without changing what the three provider analysis calls produce. The
+// synthesis step maps the rich provider analyses into these.
+// ---------------------------------------------------------------------------
+
+export const ReportPrioritySchema = z.object({
+  // Stable, title-derived slug (e.g. "first-step-efficiency"). Assigned
+  // deterministically server-side (see normalizePriorityIds in providers),
+  // used as the handle that Phase 2 will link training-plan drills to.
+  id: z.string(),
+  title: z.string(),
   category: RubricCategorySchema,
   timestamp: z.string(),
-  observation: z.string(),
-  whyItMatters: z.string(),
-  howToImprove: z.string(),
+  observations: z.array(z.string()),
+  whyItMatters: z.array(z.string()),
+  howToImprove: z.array(z.string()),
   recommendedDrill: DrillSuggestionSchema,
 });
-export type PriorityItem = z.infer<typeof PriorityItemSchema>;
+export type ReportPriority = z.infer<typeof ReportPrioritySchema>;
 
-const PRIORITY_ITEM_JSON_SCHEMA = {
+const REPORT_PRIORITY_JSON_SCHEMA = {
   type: "object",
   properties: {
+    id: { type: "string" },
+    title: { type: "string" },
     category: { type: "string", enum: RUBRIC_CATEGORIES },
     timestamp: { type: "string" },
-    observation: { type: "string" },
-    whyItMatters: { type: "string" },
-    howToImprove: { type: "string" },
+    observations: { type: "array", items: { type: "string" } },
+    whyItMatters: { type: "array", items: { type: "string" } },
+    howToImprove: { type: "array", items: { type: "string" } },
     recommendedDrill: DRILL_SUGGESTION_JSON_SCHEMA,
   },
   required: [
+    "id",
+    "title",
     "category",
     "timestamp",
-    "observation",
+    "observations",
     "whyItMatters",
     "howToImprove",
     "recommendedDrill",
   ],
+  additionalProperties: false,
+};
+
+export const ReportStrengthSchema = z.object({
+  title: z.string(),
+  category: RubricCategorySchema,
+  timestamp: z.string(),
+  points: z.array(z.string()),
+});
+export type ReportStrength = z.infer<typeof ReportStrengthSchema>;
+
+const REPORT_STRENGTH_JSON_SCHEMA = {
+  type: "object",
+  properties: {
+    title: { type: "string" },
+    category: { type: "string", enum: RUBRIC_CATEGORIES },
+    timestamp: { type: "string" },
+    points: { type: "array", items: { type: "string" } },
+  },
+  required: ["title", "category", "timestamp", "points"],
+  additionalProperties: false,
+};
+
+export const ReportKeyMomentSchema = z.object({
+  timestamp: z.string(),
+  label: z.string(),
+  description: z.string(),
+});
+export type ReportKeyMoment = z.infer<typeof ReportKeyMomentSchema>;
+
+const REPORT_KEY_MOMENT_JSON_SCHEMA = {
+  type: "object",
+  properties: {
+    timestamp: { type: "string" },
+    label: { type: "string" },
+    description: { type: "string" },
+  },
+  required: ["timestamp", "label", "description"],
   additionalProperties: false,
 };
 
@@ -186,10 +244,13 @@ export type ProviderResult =
 
 export const GoalieReportSchema = z.object({
   summary: z.string(),
-  strengths: z.array(StrengthItemSchema),
+  strengths: z.array(ReportStrengthSchema),
+  // technicalIssues stays as the rich provider-analysis shape: it is NOT
+  // rendered as its own section (priorities cover what to work on), but it
+  // feeds training-plan generation and the synthesis fallback, so keep it.
   technicalIssues: z.array(TechnicalIssueItemSchema),
-  topPriorities: z.array(PriorityItemSchema).min(1).max(3),
-  keyMoments: z.array(KeyMomentSchema),
+  topPriorities: z.array(ReportPrioritySchema).min(1).max(3),
+  keyMoments: z.array(ReportKeyMomentSchema),
   recommendedDrills: z.array(DrillSuggestionSchema),
   sourceCount: z.union([z.literal(1), z.literal(2), z.literal(3)]),
 });
@@ -199,10 +260,10 @@ export const GOALIE_REPORT_JSON_SCHEMA = {
   type: "object",
   properties: {
     summary: { type: "string" },
-    strengths: { type: "array", items: STRENGTH_ITEM_JSON_SCHEMA },
+    strengths: { type: "array", items: REPORT_STRENGTH_JSON_SCHEMA },
     technicalIssues: { type: "array", items: TECHNICAL_ISSUE_ITEM_JSON_SCHEMA },
-    topPriorities: { type: "array", items: PRIORITY_ITEM_JSON_SCHEMA },
-    keyMoments: { type: "array", items: KEY_MOMENT_JSON_SCHEMA },
+    topPriorities: { type: "array", items: REPORT_PRIORITY_JSON_SCHEMA },
+    keyMoments: { type: "array", items: REPORT_KEY_MOMENT_JSON_SCHEMA },
     recommendedDrills: { type: "array", items: DRILL_SUGGESTION_JSON_SCHEMA },
     sourceCount: { type: "integer", enum: [1, 2, 3] },
   },
