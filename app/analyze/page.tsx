@@ -18,6 +18,21 @@ type Stage =
   | "done"
   | "error";
 
+// If a serverless function times out or crashes, Vercel returns a plain-text
+// error page rather than our JSON — calling response.json() on that throws a
+// cryptic "Unexpected token" error. Read the body as text and parse
+// defensively so the user always gets a clean, actionable message.
+async function parseJsonResponse(
+  response: Response
+): Promise<{ ok: boolean; data: Record<string, unknown> }> {
+  const text = await response.text();
+  try {
+    return { ok: response.ok, data: JSON.parse(text) };
+  } catch {
+    return { ok: false, data: {} };
+  }
+}
+
 export default function AnalyzePage() {
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -43,10 +58,15 @@ export default function AnalyzePage() {
         body: JSON.stringify({ frames }),
       });
 
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error ?? "Analysis failed.");
+      const { ok, data } = await parseJsonResponse(response);
+      if (!ok) {
+        throw new Error(
+          (data.error as string) ??
+            "Analysis timed out or failed. Please try again."
+        );
+      }
 
-      setReport(data.report);
+      setReport(data.report as GoalieReportData);
       setStage("analysis-ready");
     } catch (err) {
       setErrorMessage((err as Error).message);
@@ -70,10 +90,15 @@ export default function AnalyzePage() {
         body: JSON.stringify({ report, playerInfo: info }),
       });
 
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error ?? "Couldn't generate a training plan.");
+      const { ok, data } = await parseJsonResponse(response);
+      if (!ok) {
+        throw new Error(
+          (data.error as string) ??
+            "Couldn't generate a training plan. Please try again."
+        );
+      }
 
-      setPlan(data.plan);
+      setPlan(data.plan as TrainingPlan);
       setStage("done");
     } catch (err) {
       setErrorMessage((err as Error).message);

@@ -1,5 +1,11 @@
 import { NextResponse } from "next/server";
-import { callClaude, callGemini, callOpenAI, callSynthesis } from "@/lib/providers";
+import {
+  buildReportFromAnalysis,
+  callClaude,
+  callGemini,
+  callOpenAI,
+  callSynthesis,
+} from "@/lib/providers";
 import { AnalyzeVideoRequestSchema } from "@/lib/schemas";
 
 // Three concurrent provider analysis calls plus one sequential synthesis
@@ -43,12 +49,21 @@ export async function POST(request: Request) {
     successes.map((result) => ({ provider: result.provider, analysis: result.analysis }))
   );
 
-  if (!synthesis.ok) {
-    return NextResponse.json(
-      { error: "Analysis failed. Please try again." },
-      { status: 502 }
-    );
+  if (synthesis.ok) {
+    return NextResponse.json({ report: synthesis.report });
   }
 
-  return NextResponse.json({ report: synthesis.report });
+  // Synthesis failed (e.g. timed out) but the analysis calls succeeded —
+  // rather than throw that work away, build a report deterministically from
+  // the first good analysis so the user still gets a usable result.
+  const fallbackReport = buildReportFromAnalysis(successes[0].analysis);
+  if (fallbackReport) {
+    console.log("[route] analyze-video: served synthesis fallback report");
+    return NextResponse.json({ report: fallbackReport });
+  }
+
+  return NextResponse.json(
+    { error: "Analysis failed. Please try again." },
+    { status: 502 }
+  );
 }
