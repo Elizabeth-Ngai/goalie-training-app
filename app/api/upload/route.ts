@@ -16,6 +16,10 @@ export async function POST(request: Request) {
             "video/webm",
           ],
           maximumSizeInBytes: 100 * 1024 * 1024,
+          // Give every upload a unique filename so re-uploading the same clip
+          // (or two users uploading files with the same name) never collides
+          // with an existing blob.
+          addRandomSuffix: true,
         };
       },
       onUploadCompleted: async ({ blob }) => {
