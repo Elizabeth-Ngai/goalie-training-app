@@ -2,18 +2,100 @@
 
 import { upload } from "@vercel/blob/client";
 import { useState } from "react";
+import { extractFrames } from "@/lib/extractFrames";
+import { GoalieReport as GoalieReportData, PlayerInfo, TrainingPlan } from "@/lib/schemas";
+import GoalieReport from "@/components/GoalieReport";
+import PlayerInfoForm from "@/components/PlayerInfoForm";
+import TrainingPlanView from "@/components/TrainingPlanView";
+import AnalysisLoading from "@/components/AnalysisLoading";
+import ErrorPanel from "@/components/ErrorPanel";
+
+type Stage =
+  | "upload"
+  | "analyzing"
+  | "analysis-ready"
+  | "generating-plan"
+  | "done"
+  | "error";
 
 export default function AnalyzePage() {
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+
+  const [stage, setStage] = useState<Stage>("upload");
+  const [report, setReport] = useState<GoalieReportData | null>(null);
+  const [playerInfo, setPlayerInfo] = useState<PlayerInfo | null>(null);
+  const [plan, setPlan] = useState<TrainingPlan | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [errorContext, setErrorContext] = useState<"analysis" | "plan" | null>(null);
+
+  async function runAnalysis(url: string) {
+    setStage("analyzing");
+    setErrorMessage(null);
+    setErrorContext(null);
+
+    try {
+      const frames = await extractFrames(url);
+      const response = await fetch("/api/analyze-video", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ frames }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "Analysis failed.");
+
+      setReport(data.report);
+      setStage("analysis-ready");
+    } catch (err) {
+      setErrorMessage((err as Error).message);
+      setErrorContext("analysis");
+      setStage("error");
+    }
+  }
+
+  async function handlePlayerInfoSubmit(info: PlayerInfo) {
+    if (!report) return;
+
+    setPlayerInfo(info);
+    setStage("generating-plan");
+    setErrorMessage(null);
+    setErrorContext(null);
+
+    try {
+      const response = await fetch("/api/training-plan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ report, playerInfo: info }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "Couldn't generate a training plan.");
+
+      setPlan(data.plan);
+      setStage("done");
+    } catch (err) {
+      setErrorMessage((err as Error).message);
+      setErrorContext("plan");
+      setStage("error");
+    }
+  }
+
+  function handleRetry() {
+    if (errorContext === "analysis" && videoUrl) {
+      runAnalysis(videoUrl);
+    } else if (errorContext === "plan" && playerInfo) {
+      handlePlayerInfoSubmit(playerInfo);
+    }
+  }
 
   async function handleUpload(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) return;
 
     setUploading(true);
-    setError(null);
+    setUploadError(null);
 
     try {
       const blob = await upload(file.name, file, {
@@ -22,8 +104,9 @@ export default function AnalyzePage() {
       });
 
       setVideoUrl(blob.url);
+      runAnalysis(blob.url);
     } catch (err) {
-      setError((err as Error).message);
+      setUploadError((err as Error).message);
     } finally {
       setUploading(false);
     }
@@ -31,9 +114,10 @@ export default function AnalyzePage() {
 
   return (
     <main className="mx-auto max-w-3xl px-6 py-12">
-      <h1 className="text-3xl font-bold tracking-tight">Analyze Video</h1>
+      <h1 className="text-3xl font-bold tracking-tight">AI Goalie</h1>
       <p className="mt-2 text-muted">
-        Upload a video directly to storage to get a playable URL.
+        Upload a goalkeeper training clip to get a personalized coaching
+        analysis and training plan.
       </p>
 
       <div className="mt-8 space-y-6">
@@ -66,9 +150,9 @@ export default function AnalyzePage() {
           />
         </label>
 
-        {error && (
+        {uploadError && (
           <div className="rounded-xl border border-border bg-surface p-5">
-            <p className="text-sm text-bad">{error}</p>
+            <p className="text-sm text-bad">{uploadError}</p>
           </div>
         )}
 
@@ -76,6 +160,38 @@ export default function AnalyzePage() {
           <div className="relative w-full overflow-hidden rounded-xl border border-border bg-black">
             <video src={videoUrl} controls className="w-full" />
           </div>
+        )}
+
+        {videoUrl && stage === "analyzing" && (
+          <AnalysisLoading label="Analyzing with AI Goalie..." />
+        )}
+
+        {videoUrl && stage === "analysis-ready" && report && (
+          <>
+            <GoalieReport report={report} />
+            <PlayerInfoForm onSubmit={handlePlayerInfoSubmit} submitting={false} />
+          </>
+        )}
+
+        {videoUrl && stage === "generating-plan" && report && (
+          <>
+            <GoalieReport report={report} />
+            <AnalysisLoading label="Building your 7-day training plan..." />
+          </>
+        )}
+
+        {videoUrl && stage === "done" && report && plan && (
+          <>
+            <GoalieReport report={report} />
+            <TrainingPlanView plan={plan} />
+          </>
+        )}
+
+        {videoUrl && stage === "error" && errorMessage && (
+          <>
+            {errorContext === "plan" && report && <GoalieReport report={report} />}
+            <ErrorPanel message={errorMessage} onRetry={handleRetry} />
+          </>
         )}
       </div>
     </main>
