@@ -280,7 +280,12 @@ const TRAINING_DAY_JSON_SCHEMA = {
 
 export const TrainingPlanSchema = z.object({
   overview: z.string(),
-  days: z.array(TrainingDaySchema).length(7),
+  // The prompt asks for exactly 7 days, but we accept a range rather than a
+  // hard length(7): the structured-output API doesn't enforce an exact count,
+  // so occasionally the model returns 6 or 8 — showing that plan is far better
+  // than hard-failing the whole request on an off-by-one. The UI renders
+  // however many days are present.
+  days: z.array(TrainingDaySchema).min(1).max(14),
 });
 export type TrainingPlan = z.infer<typeof TrainingPlanSchema>;
 

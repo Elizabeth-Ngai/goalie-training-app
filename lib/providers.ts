@@ -37,14 +37,18 @@ export type RawFrame = { timestamp: number; base64: string };
 // analysis — never a hard Vercel function kill.
 const ANALYSIS_TIMEOUT_MS = 26_000;
 const SYNTHESIS_TIMEOUT_MS = 28_000;
-const TRAINING_PLAN_TIMEOUT_MS = 45_000;
+// The training-plan call is its own request (own 60s budget, not competing
+// with analysis+synthesis), so it can use most of that budget: a full 7-day
+// plan is a large structured output and needs both time and token headroom
+// to finish without truncating mid-JSON.
+const TRAINING_PLAN_TIMEOUT_MS = 52_000;
 
 // Capping output length is the other half of bounding latency — generation
 // time scales with tokens produced. These are generous enough for a full
 // rubric / report but keep the slowest calls from running away.
 const ANALYSIS_MAX_TOKENS = 3000;
 const SYNTHESIS_MAX_TOKENS = 3000;
-const TRAINING_PLAN_MAX_TOKENS = 6000;
+const TRAINING_PLAN_MAX_TOKENS = 8000;
 
 // Anthropic's client resolves credentials lazily (only throws once a request
 // is made), so it's safe to construct at module scope. OpenAI and
