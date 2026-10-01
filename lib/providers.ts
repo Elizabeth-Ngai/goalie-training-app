@@ -190,7 +190,13 @@ export async function callGemini(frames: RawFrame[]): Promise<ProviderResult> {
       httpOptions: { retryOptions: { attempts: 1 }, timeout: ANALYSIS_TIMEOUT_MS },
     });
     const response = await genai.models.generateContent({
-      model: "gemini-3.8-flash",
+      // gemini-3.8-flash (Google's current default for new keys) is heavily
+      // capacity-constrained right now — it intermittently 503s and, when it
+      // does respond, routinely takes 15s+ even on trivial prompts, blowing
+      // past ANALYSIS_TIMEOUT_MS. The flash-lite model is far less congested
+      // (sub-second on a smoke test) and handles this multimodal + structured
+      // JSON workload fine. Revisit if the full model's availability recovers.
+      model: "gemini-3.5-flash-lite",
       contents: [
         {
           role: "user",
