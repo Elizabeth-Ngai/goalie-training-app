@@ -35,6 +35,7 @@ async function parseJsonResponse(
 
 export default function AnalyzePage() {
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [videoFilename, setVideoFilename] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
@@ -44,6 +45,24 @@ export default function AnalyzePage() {
   const [plan, setPlan] = useState<TrainingPlan | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [errorContext, setErrorContext] = useState<"analysis" | "plan" | null>(null);
+
+  // Generated once per uploaded video (in handleUpload, before the Blob
+  // upload starts) and reused for every persistence call across the whole
+  // lifecycle — analysis-create, plan-update, and eventually the
+  // /history/[id] link. A stable client-side id (rather than one returned
+  // asynchronously from the create call) is what lets the create endpoint
+  // be a safe upsert: a retried "Save" after a timeout re-applies the same
+  // id instead of risking a duplicate row.
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  // Cheap additional guard against firing a redundant concurrent create
+  // request (e.g. a fast double-click on "Retry save") — the server-side
+  // upsert is the authoritative duplicate-prevention mechanism, this just
+  // avoids a pointless extra network call.
+  const creatingSessionRef = useRef(false);
+  // Guards against a fast double-click firing handlePlayerInfoSubmit twice
+  // before React commits the re-render that unmounts PlayerInfoForm.
+  const submittingPlanRef = useRef(false);
+  const [saveWarning, setSaveWarning] = useState<string | null>(null);
 
   const videoRef = useRef<HTMLVideoElement>(null);
 
@@ -59,7 +78,62 @@ export default function AnalyzePage() {
     video.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }
 
-  async function runAnalysis(url: string) {
+  // Persistence is purely additive: it never blocks or re-triggers the AI
+  // calls above, and a failure here only ever surfaces as saveWarning —
+  // report/plan keep rendering from local state regardless.
+  async function persistNewSession(
+    id: string,
+    url: string,
+    filename: string,
+    reportData: GoalieReportData
+  ) {
+    if (creatingSessionRef.current) return;
+    creatingSessionRef.current = true;
+    try {
+      const response = await fetch("/api/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, videoUrl: url, videoFilename: filename, report: reportData }),
+      });
+      const { ok } = await parseJsonResponse(response);
+      if (!ok) throw new Error();
+      setSaveWarning(null);
+    } catch {
+      setSaveWarning("Your analysis is shown below, but it couldn't be saved to your history.");
+    } finally {
+      creatingSessionRef.current = false;
+    }
+  }
+
+  async function persistSessionPlan(id: string, info: PlayerInfo, planData: TrainingPlan) {
+    try {
+      const response = await fetch(`/api/sessions/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ playerInfo: info, trainingPlan: planData }),
+      });
+      const { ok } = await parseJsonResponse(response);
+      if (!ok) throw new Error();
+      setSaveWarning(null);
+    } catch {
+      setSaveWarning("Your training plan is shown below, but it couldn't be saved to your history.");
+    }
+  }
+
+  // Always re-runs the create step then the update step (if plan data
+  // exists locally), regardless of which one actually failed — both are
+  // idempotent server-side, so retrying the one that already succeeded is
+  // a harmless no-op. This makes "Retry save" self-healing without the
+  // client needing to track precisely which step failed.
+  async function retrySave() {
+    if (!sessionId || !videoUrl || !videoFilename || !report) return;
+    await persistNewSession(sessionId, videoUrl, videoFilename, report);
+    if (playerInfo && plan) {
+      await persistSessionPlan(sessionId, playerInfo, plan);
+    }
+  }
+
+  async function runAnalysis(url: string, id: string, filename: string) {
     setStage("analyzing");
     setErrorMessage(null);
     setErrorContext(null);
@@ -80,8 +154,10 @@ export default function AnalyzePage() {
         );
       }
 
-      setReport(data.report as GoalieReportData);
+      const reportData = data.report as GoalieReportData;
+      setReport(reportData);
       setStage("analysis-ready");
+      void persistNewSession(id, url, filename, reportData);
     } catch (err) {
       setErrorMessage((err as Error).message);
       setErrorContext("analysis");
@@ -90,7 +166,13 @@ export default function AnalyzePage() {
   }
 
   async function handlePlayerInfoSubmit(info: PlayerInfo) {
-    if (!report) return;
+    // Guards the real double-submit window: a fast double-click fires this
+    // handler twice before React has committed the re-render that unmounts
+    // PlayerInfoForm (stage flips to "generating-plan" synchronously below,
+    // but only takes effect on the next render) — the ref check is
+    // synchronous and closes that gap regardless of render timing.
+    if (!report || submittingPlanRef.current) return;
+    submittingPlanRef.current = true;
 
     setPlayerInfo(info);
     setStage("generating-plan");
@@ -112,18 +194,24 @@ export default function AnalyzePage() {
         );
       }
 
-      setPlan(data.plan as TrainingPlan);
+      const planData = data.plan as TrainingPlan;
+      setPlan(planData);
       setStage("done");
+      if (sessionId) {
+        void persistSessionPlan(sessionId, info, planData);
+      }
     } catch (err) {
       setErrorMessage((err as Error).message);
       setErrorContext("plan");
       setStage("error");
+    } finally {
+      submittingPlanRef.current = false;
     }
   }
 
   function handleRetry() {
-    if (errorContext === "analysis" && videoUrl) {
-      runAnalysis(videoUrl);
+    if (errorContext === "analysis" && videoUrl && sessionId && videoFilename) {
+      runAnalysis(videoUrl, sessionId, videoFilename);
     } else if (errorContext === "plan" && playerInfo) {
       handlePlayerInfoSubmit(playerInfo);
     }
@@ -133,8 +221,12 @@ export default function AnalyzePage() {
     const file = event.target.files?.[0];
     if (!file) return;
 
+    const id = crypto.randomUUID();
+
     setUploading(true);
     setUploadError(null);
+    setSessionId(id);
+    setVideoFilename(file.name);
 
     try {
       const blob = await upload(file.name, file, {
@@ -143,7 +235,7 @@ export default function AnalyzePage() {
       });
 
       setVideoUrl(blob.url);
-      runAnalysis(blob.url);
+      runAnalysis(blob.url, id, file.name);
     } catch (err) {
       setUploadError((err as Error).message);
     } finally {
@@ -210,6 +302,18 @@ export default function AnalyzePage() {
             <div>
               {stage === "analyzing" && (
                 <AnalysisLoading label="Analyzing with AI Goalie..." />
+              )}
+              {saveWarning && (
+                <div className="mb-4 rounded-xl border border-border bg-surface p-4">
+                  <p className="text-sm text-warn">{saveWarning}</p>
+                  <button
+                    type="button"
+                    onClick={retrySave}
+                    className="mt-2 text-sm font-medium text-accent"
+                  >
+                    Retry save
+                  </button>
+                </div>
               )}
               {report && <GoalieReport report={report} onSeek={seekTo} />}
               {stage === "error" && errorContext === "analysis" && errorMessage && (

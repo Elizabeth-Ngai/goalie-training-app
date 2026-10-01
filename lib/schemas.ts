@@ -404,3 +404,21 @@ export const TrainingPlanRequestSchema = z.object({
   report: GoalieReportSchema,
   playerInfo: PlayerInfoSchema,
 });
+
+// ---------------------------------------------------------------------------
+// (d) Analysis session persistence (Phase 3)
+// ---------------------------------------------------------------------------
+
+export const CreateSessionRequestSchema = z.object({
+  id: z.uuid(),
+  videoUrl: z.url(),
+  videoFilename: z.string().min(1),
+  report: GoalieReportSchema,
+});
+export type CreateSessionRequest = z.infer<typeof CreateSessionRequestSchema>;
+
+export const UpdateSessionRequestSchema = z.object({
+  playerInfo: PlayerInfoSchema,
+  trainingPlan: TrainingPlanSchema,
+});
+export type UpdateSessionRequest = z.infer<typeof UpdateSessionRequestSchema>;

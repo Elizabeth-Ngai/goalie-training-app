@@ -42,6 +42,9 @@ export default function RootLayout({
               <Link href="/" className="transition-colors hover:text-foreground">
                 Home
               </Link>
+              <Link href="/history" className="transition-colors hover:text-foreground">
+                History
+              </Link>
               <Link
                 href="/upload"
                 className="rounded-lg bg-surface-raised px-3 py-1.5 font-medium text-foreground transition-colors hover:bg-border"
