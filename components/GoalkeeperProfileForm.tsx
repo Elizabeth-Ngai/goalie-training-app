@@ -1,30 +1,32 @@
 "use client";
 
 import { useState } from "react";
-import { PLAYING_LEVELS, PlayerInfo, PlayerInfoSchema, WEEKDAYS } from "@/lib/schemas";
+import {
+  GoalkeeperProfileDefaults,
+  GoalkeeperProfileDefaultsSchema,
+  PLAYING_LEVELS,
+} from "@/lib/schemas";
 
 const EQUIPMENT_OPTIONS = ["Cones", "Balls", "Goal", "Wall", "Gloves", "Resistance band"];
 const DURATION_OPTIONS = [30, 45, 60, 90];
 
-export default function PlayerInfoForm({
+// Dedicated profile editor for the STABLE default fields only (deliberately
+// not the training form — session-specific fields like training goal and this
+// week's available days don't belong in a saved profile). Kept separate so the
+// training PlayerInfoForm stays focused on generating a plan.
+export default function GoalkeeperProfileForm({
+  initial,
   onSubmit,
   submitting,
-  initial,
 }: {
-  onSubmit: (info: PlayerInfo) => void;
+  initial?: GoalkeeperProfileDefaults | null;
+  onSubmit: (defaults: GoalkeeperProfileDefaults) => void;
   submitting: boolean;
-  // Optional profile-derived defaults. Only the stable fields are seeded;
-  // the session-specific fields (trainingGoal, availableDays) are never
-  // prefilled from a profile. Parent remounts this form (via key) once the
-  // profile loads, so these initializers pick up the values.
-  initial?: Partial<PlayerInfo>;
 }) {
   const [age, setAge] = useState(initial?.age != null ? String(initial.age) : "16");
   const [playingLevel, setPlayingLevel] = useState<(typeof PLAYING_LEVELS)[number]>(
     initial?.playingLevel ?? "competitive"
   );
-  const [trainingGoal, setTrainingGoal] = useState("");
-  const [availableDays, setAvailableDays] = useState<(typeof WEEKDAYS)[number][]>([]);
   const [sessionDurationMinutes, setSessionDurationMinutes] = useState(
     initial?.sessionDurationMinutes ?? 45
   );
@@ -33,12 +35,6 @@ export default function PlayerInfoForm({
     initial?.hasTrainingPartner ?? false
   );
   const [error, setError] = useState<string | null>(null);
-
-  function toggleDay(day: (typeof WEEKDAYS)[number]) {
-    setAvailableDays((prev) =>
-      prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]
-    );
-  }
 
   function toggleEquipment(item: string) {
     setEquipment((prev) =>
@@ -49,18 +45,16 @@ export default function PlayerInfoForm({
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
 
-    const parsed = PlayerInfoSchema.safeParse({
+    const parsed = GoalkeeperProfileDefaultsSchema.safeParse({
       age: Number(age),
       playingLevel,
-      trainingGoal,
-      availableDays,
       sessionDurationMinutes,
       equipment,
       hasTrainingPartner,
     });
 
     if (!parsed.success) {
-      setError("Please fill in age, training goal, and at least one available day.");
+      setError("Please enter a valid age.");
       return;
     }
 
@@ -69,13 +63,11 @@ export default function PlayerInfoForm({
   }
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      className="rounded-xl border border-border bg-surface p-5"
-    >
-      <h2 className="font-semibold">Your Training Information</h2>
+    <form onSubmit={handleSubmit} className="rounded-xl border border-border bg-surface p-5">
+      <h2 className="font-semibold">Your Goalkeeper Profile</h2>
       <p className="mt-1 text-sm text-muted">
-        Tell us about yourself so AI Goalie can personalize your training plan.
+        These defaults prefill your training form each time you analyze a video.
+        Your per-session goal and available days are still chosen each time.
       </p>
 
       <div className="mt-4 grid gap-4 sm:grid-cols-2">
@@ -110,38 +102,7 @@ export default function PlayerInfoForm({
       </div>
 
       <label className="mt-4 block text-sm">
-        Training goal
-        <input
-          type="text"
-          placeholder="e.g. Improve diving technique before tryouts"
-          value={trainingGoal}
-          onChange={(e) => setTrainingGoal(e.target.value)}
-          className="mt-1 w-full rounded-lg border border-border bg-surface-raised px-3 py-2"
-        />
-      </label>
-
-      <div className="mt-4">
-        <p className="text-sm">Available days</p>
-        <div className="mt-2 flex flex-wrap gap-2">
-          {WEEKDAYS.map((day) => (
-            <button
-              key={day}
-              type="button"
-              onClick={() => toggleDay(day)}
-              className={`rounded-lg border px-3 py-1.5 text-sm ${
-                availableDays.includes(day)
-                  ? "border-accent bg-accent text-accent-foreground"
-                  : "border-border bg-surface-raised hover:border-accent"
-              }`}
-            >
-              {day}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <label className="mt-4 block text-sm">
-        Session duration
+        Usual session duration
         <select
           value={sessionDurationMinutes}
           onChange={(e) => setSessionDurationMinutes(Number(e.target.value))}
@@ -156,7 +117,7 @@ export default function PlayerInfoForm({
       </label>
 
       <div className="mt-4">
-        <p className="text-sm">Available equipment</p>
+        <p className="text-sm">Usual equipment</p>
         <div className="mt-2 flex flex-wrap gap-2">
           {EQUIPMENT_OPTIONS.map((item) => (
             <button
@@ -181,7 +142,7 @@ export default function PlayerInfoForm({
           checked={hasTrainingPartner}
           onChange={(e) => setHasTrainingPartner(e.target.checked)}
         />
-        I have a coach or training partner available
+        I usually have a coach or training partner available
       </label>
 
       {error && <p className="mt-4 text-sm text-bad">{error}</p>}
@@ -191,7 +152,7 @@ export default function PlayerInfoForm({
         disabled={submitting}
         className="mt-5 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground disabled:opacity-60"
       >
-        {submitting ? "Generating..." : "Generate My Training Plan"}
+        {submitting ? "Saving..." : "Save Profile"}
       </button>
     </form>
   );

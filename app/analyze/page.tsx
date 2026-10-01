@@ -1,7 +1,7 @@
 "use client";
 
 import { upload } from "@vercel/blob/client";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { extractFrames } from "@/lib/extractFrames";
 import { GoalieReport as GoalieReportData, PlayerInfo, TrainingPlan } from "@/lib/schemas";
 import GoalieReport from "@/components/GoalieReport";
@@ -64,7 +64,32 @@ export default function AnalyzePage() {
   const submittingPlanRef = useRef(false);
   const [saveWarning, setSaveWarning] = useState<string | null>(null);
 
+  // Profile defaults (stable prefs only) used to prefill the training form.
+  // undefined = not yet loaded; null = loaded, no saved profile.
+  const [profileDefaults, setProfileDefaults] = useState<Partial<PlayerInfo> | null | undefined>(
+    undefined
+  );
+
   const videoRef = useRef<HTMLVideoElement>(null);
+
+  // Load the signed-in user's profile once so the training form (shown later,
+  // at stage "analysis-ready") can be prefilled. /analyze is auth-protected by
+  // proxy.ts, so the user is signed in and /api/profile returns their row.
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const res = await fetch("/api/profile");
+        const data = await res.json();
+        if (active) setProfileDefaults((data?.defaults as Partial<PlayerInfo>) ?? null);
+      } catch {
+        if (active) setProfileDefaults(null);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   // Seek the existing video to a moment from the analysis and play it. Reused
   // for every "Watch 00:04.2" control in the report. scrollIntoView with
@@ -327,7 +352,15 @@ export default function AnalyzePage() {
             below the review grid — training is intentionally NOT locked into
             the narrow right column (Phase 2 redesigns it as a wider view). */}
         {stage === "analysis-ready" && (
-          <PlayerInfoForm onSubmit={handlePlayerInfoSubmit} submitting={false} />
+          // key remounts the form once the profile resolves so the seeded
+          // defaults apply. Only stable fields are prefilled; trainingGoal and
+          // availableDays are left for the user to set per session.
+          <PlayerInfoForm
+            key={profileDefaults === undefined ? "loading" : "ready"}
+            initial={profileDefaults ?? undefined}
+            onSubmit={handlePlayerInfoSubmit}
+            submitting={false}
+          />
         )}
 
         {stage === "generating-plan" && (

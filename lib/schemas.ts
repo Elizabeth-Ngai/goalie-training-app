@@ -422,3 +422,28 @@ export const UpdateSessionRequestSchema = z.object({
   trainingPlan: TrainingPlanSchema,
 });
 export type UpdateSessionRequest = z.infer<typeof UpdateSessionRequestSchema>;
+
+// ---------------------------------------------------------------------------
+// (e) Goalkeeper profile (Phase 4) — STABLE default preferences only.
+//
+// A profile holds the reusable, slow-changing fields that make sense to
+// remember between sessions and prefill into the training form. It is a
+// deliberate SUBSET of PlayerInfo: the session-specific fields
+// (trainingGoal — the current focus; availableDays — this week's schedule)
+// are intentionally excluded, so prefilling a profile never carries stale
+// per-session intent into a new plan.
+// ---------------------------------------------------------------------------
+
+export const GoalkeeperProfileDefaultsSchema = PlayerInfoSchema.pick({
+  age: true,
+  playingLevel: true,
+  sessionDurationMinutes: true,
+  equipment: true,
+  hasTrainingPartner: true,
+});
+export type GoalkeeperProfileDefaults = z.infer<typeof GoalkeeperProfileDefaultsSchema>;
+
+export const ProfileRequestSchema = z.object({
+  defaults: GoalkeeperProfileDefaultsSchema,
+});
+export type ProfileRequest = z.infer<typeof ProfileRequestSchema>;

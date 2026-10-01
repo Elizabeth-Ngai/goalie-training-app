@@ -9,7 +9,7 @@
 // behavior — a missing DATABASE_URL in production should fail loudly, not
 // quietly run with history disabled. That visibility mechanism isn't built
 // in this phase; this comment is the flag for it.
-import { desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { analysisSessions, db } from "@/lib/db";
 import {
   GoalieReport,
@@ -53,21 +53,25 @@ export type SessionDetail = {
 
 export async function createAnalysisSession(input: {
   id: string;
+  userId: string;
   videoUrl: string;
   videoFilename: string;
   report: GoalieReport;
 }): Promise<DbResult<{ id: string }>> {
   if (!db) return { ok: false, error: "Database is not configured." };
   try {
-    // Upsert keyed on the client-generated id: a retried "Retry save" after
-    // a network timeout re-applies the same analysis data rather than
-    // risking a duplicate row. Deliberately omits player_info/training_plan
-    // from the update set so a replayed create can never clobber a plan
-    // that was attached in between by a later successful PATCH.
+    // Upsert keyed on the client-generated id: a retried save after a network
+    // timeout re-applies the same analysis data rather than risking a
+    // duplicate row. Deliberately omits player_info/training_plan from the
+    // update set so a replayed create can never clobber a plan attached in
+    // between by a later PATCH. The setWhere ownership guard means a (vanishingly
+    // unlikely) id collision from a different user can never overwrite their
+    // row — the update only applies to the caller's own row.
     const rows = await db
       .insert(analysisSessions)
       .values({
         id: input.id,
+        userId: input.userId,
         videoUrl: input.videoUrl,
         videoFilename: input.videoFilename,
         report: input.report,
@@ -81,9 +85,14 @@ export async function createAnalysisSession(input: {
           report: input.report,
           updatedAt: new Date(),
         },
+        setWhere: eq(analysisSessions.userId, input.userId),
       })
       .returning({ id: analysisSessions.id });
 
+    // No returned row => the id exists but is owned by someone else (the
+    // setWhere blocked the update). Treat as a failure rather than silently
+    // succeeding without persisting.
+    if (!rows[0]) return { ok: false, error: "Session id conflict." };
     return { ok: true, data: { id: rows[0].id } };
   } catch (error) {
     console.error("[sessions] create: failed");
@@ -93,10 +102,13 @@ export async function createAnalysisSession(input: {
 
 export async function updateAnalysisSessionPlan(
   id: string,
+  userId: string,
   input: { playerInfo: PlayerInfo; trainingPlan: TrainingPlan }
 ): Promise<DbResult<{ id: string } | null>> {
   if (!db) return { ok: false, error: "Database is not configured." };
   try {
+    // Ownership-scoped: a non-owner (or a NULL legacy row) matches nothing,
+    // so data is null -> the route returns 404 without revealing existence.
     const rows = await db
       .update(analysisSessions)
       .set({
@@ -104,7 +116,7 @@ export async function updateAnalysisSessionPlan(
         trainingPlan: input.trainingPlan,
         updatedAt: new Date(), // DEFAULT now() only fires on INSERT, not UPDATE
       })
-      .where(eq(analysisSessions.id, id))
+      .where(and(eq(analysisSessions.id, id), eq(analysisSessions.userId, userId)))
       .returning({ id: analysisSessions.id });
 
     return { ok: true, data: rows[0] ? { id: rows[0].id } : null };
@@ -114,10 +126,19 @@ export async function updateAnalysisSessionPlan(
   }
 }
 
-export async function getAnalysisSession(id: string): Promise<DbResult<SessionDetail | null>> {
+export async function getAnalysisSession(
+  id: string,
+  userId: string
+): Promise<DbResult<SessionDetail | null>> {
   if (!db) return { ok: false, error: "Database is not configured." };
   try {
-    const rows = await db.select().from(analysisSessions).where(eq(analysisSessions.id, id)).limit(1);
+    // Ownership-scoped: a non-owner gets null -> the page calls notFound(),
+    // so there's no way to probe whether another user's session id exists.
+    const rows = await db
+      .select()
+      .from(analysisSessions)
+      .where(and(eq(analysisSessions.id, id), eq(analysisSessions.userId, userId)))
+      .limit(1);
     const row = rows[0];
     if (!row) return { ok: true, data: null };
 
@@ -141,7 +162,8 @@ export async function getAnalysisSession(id: string): Promise<DbResult<SessionDe
   }
 }
 
-export async function listAnalysisSessions(opts?: {
+export async function listAnalysisSessions(opts: {
+  userId: string;
   limit?: number;
   offset?: number;
 }): Promise<DbResult<SessionListItem[]>> {
@@ -160,9 +182,12 @@ export async function listAnalysisSessions(opts?: {
         trainingDayCount: sql<number | null>`jsonb_array_length(${analysisSessions.trainingPlan} -> 'days')`,
       })
       .from(analysisSessions)
+      // Scoped to the owner. Legacy rows with user_id = NULL match nothing
+      // (eq, not OR IS NULL) and stay invisible.
+      .where(eq(analysisSessions.userId, opts.userId))
       .orderBy(desc(analysisSessions.createdAt))
-      .limit(opts?.limit ?? 50)
-      .offset(opts?.offset ?? 0);
+      .limit(opts.limit ?? 50)
+      .offset(opts.offset ?? 0);
 
     return {
       ok: true,
@@ -181,15 +206,19 @@ export async function listAnalysisSessions(opts?: {
   }
 }
 
-export async function deleteAnalysisSession(id: string): Promise<DbResult<{ deleted: boolean }>> {
+export async function deleteAnalysisSession(
+  id: string,
+  userId: string
+): Promise<DbResult<{ deleted: boolean }>> {
   if (!db) return { ok: false, error: "Database is not configured." };
   try {
     // Database row only — the underlying Vercel Blob is never touched here.
     // See Phase 3 notes: Blob cleanup on delete is a known pre-launch gap,
-    // not an oversight.
+    // not an oversight. Ownership-scoped: a non-owner matches nothing, so
+    // deleted:false -> the route returns 404 and the owner's row is intact.
     const rows = await db
       .delete(analysisSessions)
-      .where(eq(analysisSessions.id, id))
+      .where(and(eq(analysisSessions.id, id), eq(analysisSessions.userId, userId)))
       .returning({ id: analysisSessions.id });
 
     return { ok: true, data: { deleted: rows.length > 0 } };

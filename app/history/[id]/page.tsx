@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { auth } from "@clerk/nextjs/server";
 import { getAnalysisSession } from "@/lib/sessions";
 import SessionDetailView from "@/components/SessionDetailView";
 
@@ -7,7 +8,12 @@ export const dynamic = "force-dynamic";
 
 export default async function SessionPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const result = await getAnalysisSession(id);
+  // proxy.ts guarantees signed-in; getAnalysisSession scopes to this owner, so
+  // another user's id (or a legacy NULL-owner row) resolves to null -> 404,
+  // leaking nothing about whether it exists.
+  const { userId } = await auth();
+  if (!userId) notFound();
+  const result = await getAnalysisSession(id, userId);
 
   if (!result.ok) {
     return (

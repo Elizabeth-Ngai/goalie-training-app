@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { auth } from "@clerk/nextjs/server";
 import { listAnalysisSessions, type SessionListItem } from "@/lib/sessions";
 
 // This page reads "newest first" live data on every request — never
@@ -53,7 +54,13 @@ function SessionCard({ item }: { item: SessionListItem }) {
 }
 
 export default async function HistoryPage() {
-  const result = await listAnalysisSessions();
+  // proxy.ts already redirects signed-out users to sign-in; this derives the
+  // owner id to scope the query. The ownership filter in listAnalysisSessions
+  // is the real guarantee a user only ever sees their own sessions.
+  const { userId } = await auth();
+  const result = userId
+    ? await listAnalysisSessions({ userId })
+    : ({ ok: false, error: "Unauthorized" } as const);
 
   return (
     <main className="mx-auto max-w-3xl px-6 py-12">
