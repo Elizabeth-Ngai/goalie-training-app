@@ -44,11 +44,15 @@ export default function RootLayout({
                 <Link href="/" className="transition-colors hover:text-foreground">
                   Home
                 </Link>
-                {/* History + Profile are only meaningful once signed in; the
-                    pages themselves also enforce auth via proxy.ts. */}
+                {/* History + Progress + Profile are only meaningful once
+                    signed in; the pages themselves also enforce auth via
+                    proxy.ts. */}
                 <Show when="signed-in">
                   <Link href="/history" className="transition-colors hover:text-foreground">
                     History
+                  </Link>
+                  <Link href="/progress" className="transition-colors hover:text-foreground">
+                    Progress
                   </Link>
                   <Link href="/profile" className="transition-colors hover:text-foreground">
                     Profile

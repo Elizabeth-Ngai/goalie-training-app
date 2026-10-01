@@ -10,7 +10,12 @@
 // — this proxy only enforces "is signed in".
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 
-const isProtectedPage = createRouteMatcher(["/analyze(.*)", "/history(.*)", "/profile(.*)"]);
+const isProtectedPage = createRouteMatcher([
+  "/analyze(.*)",
+  "/history(.*)",
+  "/profile(.*)",
+  "/progress(.*)",
+]);
 
 export default clerkMiddleware(async (auth, req) => {
   if (isProtectedPage(req)) {
