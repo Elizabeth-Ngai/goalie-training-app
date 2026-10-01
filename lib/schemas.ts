@@ -286,10 +286,20 @@ export const GOALIE_REPORT_JSON_SCHEMA = {
 export const TrainingDrillSchema = z.object({
   name: z.string(),
   purpose: z.string(),
-  instructions: z.string(),
+  // 3-6 short, concrete action steps (enforced by the prompt, not a schema
+  // bound — consistent with observations/whyItMatters/howToImprove having
+  // no min/max either).
+  instructions: z.array(z.string()),
   sets: z.number().int().nullable(),
   repsOrDuration: z.string(),
   restSeconds: z.number().int().nullable(),
+  // Structured link to a ReportPriority.id. Must be one of the ids the model
+  // was actually given, or null for general/warm-up/recovery drills with no
+  // single traceable priority. Not enforced as an enum in the JSON Schema
+  // (schemas here are static consts; valid ids vary per report) — the server
+  // post-validates in generateTrainingPlan and normalizes addressesIssue
+  // from this id, so never trust addressesIssue independently of this field.
+  addressesIssueId: z.string().nullable(),
   addressesIssue: z.string(),
 });
 export type TrainingDrill = z.infer<typeof TrainingDrillSchema>;
@@ -299,10 +309,11 @@ const TRAINING_DRILL_JSON_SCHEMA = {
   properties: {
     name: { type: "string" },
     purpose: { type: "string" },
-    instructions: { type: "string" },
+    instructions: { type: "array", items: { type: "string" } },
     sets: { type: ["integer", "null"] },
     repsOrDuration: { type: "string" },
     restSeconds: { type: ["integer", "null"] },
+    addressesIssueId: { type: ["string", "null"] },
     addressesIssue: { type: "string" },
   },
   required: [
@@ -312,6 +323,7 @@ const TRAINING_DRILL_JSON_SCHEMA = {
     "sets",
     "repsOrDuration",
     "restSeconds",
+    "addressesIssueId",
     "addressesIssue",
   ],
   additionalProperties: false,

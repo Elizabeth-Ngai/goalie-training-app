@@ -230,7 +230,13 @@ export default function AnalyzePage() {
           <AnalysisLoading label="Building your 7-day training plan..." />
         )}
 
-        {stage === "done" && plan && <TrainingPlanView plan={plan} />}
+        {stage === "done" && plan && (
+          <TrainingPlanView
+            plan={plan}
+            priorities={report?.topPriorities ?? []}
+            onSeek={seekTo}
+          />
+        )}
 
         {stage === "error" && errorContext === "plan" && errorMessage && (
           <ErrorPanel message={errorMessage} onRetry={handleRetry} />

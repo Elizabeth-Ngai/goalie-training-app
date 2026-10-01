@@ -52,6 +52,30 @@ function normalizePriorityIds(priorities: ReportPriority[]): ReportPriority[] {
   });
 }
 
+// addressesIssueId is the source of truth for a drill's link to a priority;
+// addressesIssue is never trusted independently of it. A valid id gets its
+// addressesIssue normalized to that priority's real title (discarding
+// whatever free text the model paired with it); an id that doesn't match a
+// real priority (hallucinated/stale) is fully unlinked rather than kept
+// half-wired to free text we can no longer verify. A genuinely null id
+// (the model's own "no specific priority" call for a general/warm-up drill)
+// is left as-is — that free-text label is legitimate.
+function sanitizeTrainingPlanIds(plan: TrainingPlan, priorities: ReportPriority[]): TrainingPlan {
+  const titleById = new Map(priorities.map((p) => [p.id, p.title]));
+  return {
+    ...plan,
+    days: plan.days.map((day) => ({
+      ...day,
+      drills: day.drills.map((drill) => {
+        if (drill.addressesIssueId === null) return drill;
+        const title = titleById.get(drill.addressesIssueId);
+        if (title) return { ...drill, addressesIssue: title };
+        return { ...drill, addressesIssueId: null, addressesIssue: "General Training" };
+      }),
+    })),
+  };
+}
+
 // Split a paragraph-ish string into short one-sentence bullets. Used only by
 // the deterministic fallback (buildReportFromAnalysis), which has plain
 // strings from a single provider analysis rather than the bulleted arrays the
@@ -408,6 +432,7 @@ export async function generateTrainingPlan(
               type: "text",
               text: JSON.stringify({
                 topPriorities: report.topPriorities,
+                validPriorityIds: report.topPriorities.map((p) => p.id),
                 technicalIssues: report.technicalIssues,
                 strengths: report.strengths,
                 playerInfo,
@@ -432,8 +457,10 @@ export async function generateTrainingPlan(
     const parsed = TrainingPlanSchema.safeParse(JSON.parse(content));
     if (!parsed.success) throw new Error("Malformed training plan response");
 
+    const plan = sanitizeTrainingPlanIds(parsed.data, report.topPriorities);
+
     console.log("[providers] training-plan: ok");
-    return { ok: true, plan: parsed.data };
+    return { ok: true, plan };
   } catch (error) {
     console.error("[providers] training-plan: failed");
     return { ok: false, error: (error as Error).message };
