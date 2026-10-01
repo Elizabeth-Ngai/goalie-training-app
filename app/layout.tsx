@@ -16,7 +16,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Goalie Training App",
   description:
-    "Upload goalkeeper training videos and get instant AI feedback on stance, footwork, diving form, and recovery.",
+    "Upload goalkeeper training clips and get AI coaching feedback on positioning, footwork, diving, handling, and recovery — plus a personalized training plan.",
 };
 
 export default function RootLayout({
@@ -46,7 +46,7 @@ export default function RootLayout({
                 History
               </Link>
               <Link
-                href="/upload"
+                href="/analyze"
                 className="rounded-lg bg-surface-raised px-3 py-1.5 font-medium text-foreground transition-colors hover:bg-border"
               >
                 Analyze a Video
@@ -59,7 +59,7 @@ export default function RootLayout({
 
         <footer className="border-t border-border">
           <div className="mx-auto max-w-5xl px-6 py-6 text-sm text-muted">
-            Built for goalkeepers who want sharper ready stances, one rep at a time.
+            Built for goalkeepers who want to train smarter, one clip at a time.
           </div>
         </footer>
       </body>

@@ -3,15 +3,15 @@ import Link from "next/link";
 const steps = [
   {
     title: "Upload your footage",
-    body: "Record yourself in a ready stance or during a drill and upload the clip.",
+    body: "Record a training clip or drill and upload it in seconds.",
   },
   {
-    title: "AI tracks your body",
-    body: "Pose detection maps your shoulders, hips, knees, and ankles in real time.",
+    title: "Multiple AI models review it",
+    body: "Several AI models review your goalkeeper footage, and AI Goalie combines their observations into one coaching report.",
   },
   {
-    title: "Get instant feedback",
-    body: "See a stance score and specific coaching cues you can act on immediately.",
+    title: "Get a plan you can act on",
+    body: "See clear coaching priorities tied to moments in your video, plus a personalized weekly training plan.",
   },
 ];
 
@@ -20,16 +20,17 @@ export default function Home() {
     <main className="mx-auto max-w-3xl px-6 py-20 text-center">
 
       <h1 className="mt-6 text-4xl font-bold tracking-tight sm:text-5xl">
-        Sharpen your ready stance
+        Train like a smarter goalkeeper
       </h1>
 
       <p className="mt-4 text-lg text-muted">
-        Upload goalie training videos and get feedback on stance, footwork,
-        diving form, and recovery — powered by real-time pose analysis.
+        Upload a goalkeeper clip and get AI coaching feedback on positioning,
+        footwork, diving, handling, and recovery — plus a personalized weekly
+        training plan.
       </p>
 
       <Link
-        href="/upload"
+        href="/analyze"
         className="mt-8 inline-block rounded-xl bg-accent px-6 py-3 font-semibold text-accent-foreground transition-transform hover:scale-[1.02]"
       >
         Start Training
