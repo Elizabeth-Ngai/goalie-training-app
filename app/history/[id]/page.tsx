@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { auth } from "@clerk/nextjs/server";
 import { getAnalysisSession } from "@/lib/sessions";
+import { listDrillCompletionsForSession } from "@/lib/trainingCompletions";
 import SessionDetailView from "@/components/SessionDetailView";
 
 // Always loads the current row — never statically prerendered/cached.
@@ -29,9 +30,14 @@ export default async function SessionPage({ params }: { params: Promise<{ id: st
     notFound();
   }
 
+  // Completion state for this session's drills — a plain DB read, zero AI.
+  // Degrades to an empty map if the read fails, so the plan still renders.
+  const completionsResult = await listDrillCompletionsForSession(userId, id);
+  const initialCompletions = completionsResult.ok ? completionsResult.data : {};
+
   return (
     <main className="mx-auto max-w-5xl px-6 py-12">
-      <SessionDetailView session={result.data} />
+      <SessionDetailView session={result.data} initialCompletions={initialCompletions} />
     </main>
   );
 }

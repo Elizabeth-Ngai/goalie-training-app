@@ -1,13 +1,24 @@
 "use client";
 
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import GoalieReport from "@/components/GoalieReport";
 import TrainingPlanView from "@/components/TrainingPlanView";
 import ConfirmDeleteButton from "@/components/ConfirmDeleteButton";
 import type { SessionDetail } from "@/lib/sessions";
+import type { CompletionStatus } from "@/lib/schemas";
 
-export default function SessionDetailView({ session }: { session: SessionDetail }) {
+export default function SessionDetailView({
+  session,
+  initialCompletions,
+}: {
+  session: SessionDetail;
+  // Fetched server-side (zero AI) and passed in — the drillId → status map
+  // for this session's persisted plan.
+  initialCompletions: Record<string, CompletionStatus>;
+}) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const [completions, setCompletions] =
+    useState<Record<string, CompletionStatus>>(initialCompletions);
 
   // Same seek closure as app/analyze/page.tsx — no AI call, just moves the
   // already-loaded <video> to a timestamp from the saved report/plan.
@@ -17,6 +28,36 @@ export default function SessionDetailView({ session }: { session: SessionDetail 
     video.currentTime = seconds;
     video.play().catch(() => {});
     video.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+
+  // Optimistic local update, then persist. A failed persist rolls the local
+  // state back to its previous value. This only ever touches the completions
+  // DB — it never regenerates the plan or makes an AI call.
+  async function setCompletionStatus(drillId: string, status: CompletionStatus | null) {
+    const previous = completions;
+    setCompletions((prev) => {
+      const next = { ...prev };
+      if (status === null) delete next[drillId];
+      else next[drillId] = status;
+      return next;
+    });
+    try {
+      const response =
+        status === null
+          ? await fetch(`/api/sessions/${session.id}/completions`, {
+              method: "DELETE",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ drillId }),
+            })
+          : await fetch(`/api/sessions/${session.id}/completions`, {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ drillId, status }),
+            });
+      if (!response.ok) throw new Error();
+    } catch {
+      setCompletions(previous); // roll back on failure
+    }
   }
 
   return (
@@ -65,6 +106,8 @@ export default function SessionDetailView({ session }: { session: SessionDetail 
           plan={session.trainingPlan.data}
           priorities={session.report.valid ? session.report.data.topPriorities : []}
           onSeek={seekTo}
+          completions={completions}
+          onSetCompletionStatus={setCompletionStatus}
         />
       ) : (
         <div className="rounded-xl border border-border bg-surface p-5">

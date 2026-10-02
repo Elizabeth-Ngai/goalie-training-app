@@ -99,14 +99,77 @@ function DaySelector({
   );
 }
 
+function CompletionControl({
+  drillId,
+  status,
+  onSetCompletionStatus,
+}: {
+  drillId: string;
+  status: "completed" | "skipped" | undefined;
+  onSetCompletionStatus: (drillId: string, status: "completed" | "skipped" | null) => void;
+}) {
+  if (status === "completed") {
+    return (
+      <div className="mt-2 flex items-center gap-3">
+        <span className="text-xs font-medium text-good">✓ Completed</span>
+        <button
+          type="button"
+          onClick={() => onSetCompletionStatus(drillId, null)}
+          className="min-h-8 text-xs font-medium text-muted hover:text-foreground"
+        >
+          Undo
+        </button>
+      </div>
+    );
+  }
+
+  if (status === "skipped") {
+    return (
+      <div className="mt-2 flex items-center gap-3">
+        <span className="text-xs font-medium text-muted">Skipped</span>
+        <button
+          type="button"
+          onClick={() => onSetCompletionStatus(drillId, null)}
+          className="min-h-8 text-xs font-medium text-muted hover:text-foreground"
+        >
+          Undo
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-2 flex items-center gap-3">
+      <button
+        type="button"
+        onClick={() => onSetCompletionStatus(drillId, "completed")}
+        className="min-h-8 text-xs font-medium text-accent"
+      >
+        Mark Complete
+      </button>
+      <button
+        type="button"
+        onClick={() => onSetCompletionStatus(drillId, "skipped")}
+        className="min-h-8 text-xs font-medium text-muted hover:text-foreground"
+      >
+        Mark Skipped
+      </button>
+    </div>
+  );
+}
+
 function DrillCard({
   drill,
   priorities,
   onSeek,
+  completionStatus,
+  onSetCompletionStatus,
 }: {
   drill: TrainingDrill;
   priorities: ReportPriority[];
   onSeek: (seconds: number) => void;
+  completionStatus?: "completed" | "skipped";
+  onSetCompletionStatus?: (drillId: string, status: "completed" | "skipped" | null) => void;
 }) {
   const [open, setOpen] = useState(false);
   const instructionsId = useId();
@@ -165,6 +228,16 @@ function DrillCard({
           )}
         </div>
       )}
+
+      {/* A drill with no drillId (a plan persisted before Phase 6) simply
+          offers no completion control — never forced, never fabricated. */}
+      {drill.drillId && onSetCompletionStatus && (
+        <CompletionControl
+          drillId={drill.drillId}
+          status={completionStatus}
+          onSetCompletionStatus={onSetCompletionStatus}
+        />
+      )}
     </li>
   );
 }
@@ -173,10 +246,14 @@ function DayDetail({
   day,
   priorities,
   onSeek,
+  completions,
+  onSetCompletionStatus,
 }: {
   day: TrainingDay;
   priorities: ReportPriority[];
   onSeek: (seconds: number) => void;
+  completions?: Record<string, "completed" | "skipped">;
+  onSetCompletionStatus?: (drillId: string, status: "completed" | "skipped" | null) => void;
 }) {
   return (
     <div className="mt-4 rounded-xl border border-border bg-surface-raised p-4">
@@ -195,7 +272,14 @@ function DayDetail({
       ) : (
         <ul className="mt-3 space-y-4">
           {day.drills.map((drill, index) => (
-            <DrillCard key={index} drill={drill} priorities={priorities} onSeek={onSeek} />
+            <DrillCard
+              key={index}
+              drill={drill}
+              priorities={priorities}
+              onSeek={onSeek}
+              completionStatus={drill.drillId ? completions?.[drill.drillId] : undefined}
+              onSetCompletionStatus={onSetCompletionStatus}
+            />
           ))}
         </ul>
       )}
@@ -207,10 +291,21 @@ export default function TrainingPlanView({
   plan,
   priorities,
   onSeek,
+  completions,
+  onSetCompletionStatus,
+  adaptationNotes,
 }: {
   plan: TrainingPlan;
   priorities: ReportPriority[];
   onSeek: (seconds: number) => void;
+  // Completion tracking (Phase 6) — all optional, so an un-wired caller
+  // (or a historical plan whose drills have no drillId) renders a clean,
+  // read-only plan exactly as before.
+  completions?: Record<string, "completed" | "skipped">;
+  onSetCompletionStatus?: (drillId: string, status: "completed" | "skipped" | null) => void;
+  // Deterministic, evidence-based adaptation explanation, shown only right
+  // after a fresh generation (never reconstructed for historical plans).
+  adaptationNotes?: string[];
 }) {
   const [selectedIndex, setSelectedIndex] = useState(() => firstSelectableDayIndex(plan.days));
   const selectedDay = plan.days[selectedIndex] ?? plan.days[0];
@@ -220,6 +315,22 @@ export default function TrainingPlanView({
       <h2 className="font-semibold">Your Training Plan</h2>
       <p className="mt-2 text-sm text-muted">{plan.overview}</p>
 
+      {adaptationNotes && adaptationNotes.length > 0 && (
+        <div className="mt-3 rounded-lg border border-border bg-surface-raised p-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted">
+            How this plan was adapted
+          </p>
+          <ul className="mt-2 space-y-1">
+            {adaptationNotes.map((note, index) => (
+              <li key={index} className="flex gap-2 text-sm text-muted">
+                <span aria-hidden>•</span>
+                <span>{note}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <WeeklySummary days={plan.days} priorities={priorities} />
 
       <h3 className="mt-5 text-xs font-semibold uppercase tracking-wide text-muted">
@@ -227,7 +338,15 @@ export default function TrainingPlanView({
       </h3>
       <DaySelector days={plan.days} selectedIndex={selectedIndex} onSelect={setSelectedIndex} />
 
-      {selectedDay && <DayDetail day={selectedDay} priorities={priorities} onSeek={onSeek} />}
+      {selectedDay && (
+        <DayDetail
+          day={selectedDay}
+          priorities={priorities}
+          onSeek={onSeek}
+          completions={completions}
+          onSetCompletionStatus={onSetCompletionStatus}
+        />
+      )}
     </div>
   );
 }

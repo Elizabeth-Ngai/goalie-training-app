@@ -43,6 +43,12 @@ export default function AnalyzePage() {
   const [report, setReport] = useState<GoalieReportData | null>(null);
   const [playerInfo, setPlayerInfo] = useState<PlayerInfo | null>(null);
   const [plan, setPlan] = useState<TrainingPlan | null>(null);
+  // Deterministic adaptation notes returned by the training-plan route,
+  // shown only for the just-generated plan (never persisted/reconstructed).
+  const [adaptationNotes, setAdaptationNotes] = useState<string[]>([]);
+  // Completion state for the just-generated plan — starts empty (nothing
+  // trained yet), updated optimistically as the user marks drills.
+  const [completions, setCompletions] = useState<Record<string, "completed" | "skipped">>({});
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [errorContext, setErrorContext] = useState<"analysis" | "plan" | null>(null);
 
@@ -145,6 +151,38 @@ export default function AnalyzePage() {
     }
   }
 
+  // Optimistic completion toggle for the just-generated plan. Requires the
+  // session to have been persisted (sessionId exists); persists via the
+  // completions API, rolling local state back on failure. Never regenerates
+  // the plan or makes an AI call.
+  async function setCompletionStatus(drillId: string, status: "completed" | "skipped" | null) {
+    if (!sessionId) return;
+    const previous = completions;
+    setCompletions((prev) => {
+      const next = { ...prev };
+      if (status === null) delete next[drillId];
+      else next[drillId] = status;
+      return next;
+    });
+    try {
+      const response =
+        status === null
+          ? await fetch(`/api/sessions/${sessionId}/completions`, {
+              method: "DELETE",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ drillId }),
+            })
+          : await fetch(`/api/sessions/${sessionId}/completions`, {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ drillId, status }),
+            });
+      if (!response.ok) throw new Error();
+    } catch {
+      setCompletions(previous);
+    }
+  }
+
   // Always re-runs the create step then the update step (if plan data
   // exists locally), regardless of which one actually failed — both are
   // idempotent server-side, so retrying the one that already succeeded is
@@ -208,7 +246,12 @@ export default function AnalyzePage() {
       const response = await fetch("/api/training-plan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ report, playerInfo: info }),
+        // analysisSessionId lets the server exclude THIS session from its own
+        // adaptive-history lookup (so the current analysis isn't double-counted
+        // as historical). Absent sessionId => server builds no adaptive context
+        // and generates from report + playerInfo alone. report is still sent
+        // directly — unchanged trust model, see Phase 6 plan §10.
+        body: JSON.stringify({ report, playerInfo: info, analysisSessionId: sessionId ?? undefined }),
       });
 
       const { ok, data } = await parseJsonResponse(response);
@@ -221,6 +264,8 @@ export default function AnalyzePage() {
 
       const planData = data.plan as TrainingPlan;
       setPlan(planData);
+      setAdaptationNotes(Array.isArray(data.adaptationNotes) ? (data.adaptationNotes as string[]) : []);
+      setCompletions({}); // fresh plan, nothing trained yet
       setStage("done");
       if (sessionId) {
         void persistSessionPlan(sessionId, info, planData);
@@ -372,6 +417,9 @@ export default function AnalyzePage() {
             plan={plan}
             priorities={report?.topPriorities ?? []}
             onSeek={seekTo}
+            completions={completions}
+            onSetCompletionStatus={setCompletionStatus}
+            adaptationNotes={adaptationNotes}
           />
         )}
 

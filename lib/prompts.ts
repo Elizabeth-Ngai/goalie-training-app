@@ -71,4 +71,15 @@ Rules:
 - Respect the player's stated available days, session duration, playing level, training goal, and partner/coach availability (e.g. only prescribe partner-fed drills when hasTrainingPartner is true) — do not schedule more days than they have available, and do not exceed their session duration.
 - Only prescribe drills using items actually listed in playerInfo.equipment, plus a ball and open space as given baseline goalkeeper gear. If "Wall" isn't listed, don't require rebounding a ball off a wall/fence — use a self-toss, a partner feed (only if hasTrainingPartner), or a bodyweight alternative instead. If "Goal" isn't listed, don't require a full-size goal.
 - Avoid repeating the same drill across multiple days unless it's a core fundamental worth reinforcing — vary the work while still targeting the same priorities.
-- Fill in every field of the response schema for all 7 days.`;
+- Fill in every field of the response schema for all 7 days.
+
+You may also receive "adaptiveContext" — this player's development history and recent training record. The current video's topPriorities and technicalIssues are always primary; adaptiveContext is supporting information, never a replacement for what this video actually shows.
+- If a current priority's category is also a Recurring Focus, give it substantial emphasis.
+- If a current priority's category is also a Recent Focus, make sure it's addressed.
+- Recent training evidence is given as counts — completed, skipped, and untracked, out of a total recommended. "Untracked" means unknown: never assume it means the training wasn't done, and never assume a completed count means the training caused any later change.
+- If a category was repeatedly completed and is still a current priority, vary or progress the drill approach rather than repeating identical work.
+- If a category was repeatedly and explicitly skipped, keep the training practical and achievable — don't assume prior training happened.
+- If a category's recent training is mostly or entirely untracked, make no assumption either way about what was actually done.
+- If a category is Improving, reinforce it without letting it dominate the plan unless the current video still flags it.
+- If a category is a Consistent Strength, light maintenance work is fine, but never at the expense of current priorities.
+- If adaptiveContext is absent, generate the plan exactly as you would from the video and player info alone.`;

@@ -10,6 +10,7 @@ import OpenAI from "openai";
 import { GoogleGenAI } from "@google/genai";
 import { formatTimestamp } from "@/lib/time";
 import { ANALYSIS_PROMPT, SYNTHESIS_PROMPT, TRAINING_PLAN_PROMPT } from "@/lib/prompts";
+import type { AdaptiveTrainingContext } from "@/lib/adaptiveTraining";
 import {
   GOALIE_REPORT_JSON_SCHEMA,
   GoalieReport,
@@ -72,6 +73,21 @@ function sanitizeTrainingPlanIds(plan: TrainingPlan, priorities: ReportPriority[
         if (title) return { ...drill, addressesIssue: title };
         return { ...drill, addressesIssueId: null, addressesIssue: "General Training" };
       }),
+    })),
+  };
+}
+
+// Assigns every drill a stable, globally-unique id (Phase 6 completion
+// tracking). The provider never produces this field — it's not in
+// TRAINING_DRILL_JSON_SCHEMA at all — so every drill always gets a fresh
+// crypto.randomUUID() here, same "never trust the model for identity"
+// precedent as normalizePriorityIds/sanitizeTrainingPlanIds above.
+function assignDrillIds(plan: TrainingPlan): TrainingPlan {
+  return {
+    ...plan,
+    days: plan.days.map((day) => ({
+      ...day,
+      drills: day.drills.map((drill) => ({ ...drill, drillId: crypto.randomUUID() })),
     })),
   };
 }
@@ -418,7 +434,11 @@ export function buildReportFromAnalysis(
 
 export async function generateTrainingPlan(
   report: GoalieReport,
-  playerInfo: PlayerInfo
+  playerInfo: PlayerInfo,
+  // Optional (Phase 6). Compact, deterministic, pre-computed server-side —
+  // see lib/adaptiveTraining.ts. When absent, the plan is generated exactly
+  // as it always was, from the current report + playerInfo alone.
+  adaptiveContext?: AdaptiveTrainingContext
 ): Promise<{ ok: true; plan: TrainingPlan } | { ok: false; error: string }> {
   try {
     const openai = new OpenAI({ maxRetries: 0 });
@@ -442,6 +462,7 @@ export async function generateTrainingPlan(
                 technicalIssues: report.technicalIssues,
                 strengths: report.strengths,
                 playerInfo,
+                ...(adaptiveContext ? { adaptiveContext } : {}),
               }),
             },
           ],
@@ -463,7 +484,7 @@ export async function generateTrainingPlan(
     const parsed = TrainingPlanSchema.safeParse(JSON.parse(content));
     if (!parsed.success) throw new Error("Malformed training plan response");
 
-    const plan = sanitizeTrainingPlanIds(parsed.data, report.topPriorities);
+    const plan = assignDrillIds(sanitizeTrainingPlanIds(parsed.data, report.topPriorities));
 
     console.log("[providers] training-plan: ok");
     return { ok: true, plan };

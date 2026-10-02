@@ -6,7 +6,7 @@
 // read path.
 import { neon } from "@neondatabase/serverless";
 import { drizzle } from "drizzle-orm/neon-http";
-import { index, integer, jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { index, integer, jsonb, pgTable, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
 
 export const analysisSessions = pgTable(
   "analysis_sessions",
@@ -44,10 +44,38 @@ export const goalkeeperProfiles = pgTable("goalkeeper_profiles", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+// Training-drill completion tracking (Phase 6). Absence of a row IS the
+// "untracked" state — there is deliberately no stored 'untracked'/'not
+// started' status value, only 'completed' | 'skipped' (validated in
+// lib/schemas.ts's CompletionStatusSchema, not re-declared here since jsonb-
+// style validate-on-read doesn't apply to a plain text column). "Undo"
+// deletes the row rather than writing a third status. drill_id references a
+// TrainingDrill.drillId living inside the analysis_sessions.training_plan
+// jsonb blob — there is no FK for it (can't FK into jsonb); ownership and
+// drill-existence are verified in lib/trainingCompletions.ts at write time.
+export const trainingDrillCompletions = pgTable(
+  "training_drill_completions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: text("user_id").notNull(),
+    analysisSessionId: uuid("analysis_session_id")
+      .notNull()
+      .references(() => analysisSessions.id, { onDelete: "cascade" }),
+    drillId: text("drill_id").notNull(),
+    status: text("status").notNull(), // "completed" | "skipped"
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [unique().on(table.userId, table.analysisSessionId, table.drillId)]
+);
+
 // Guarded: importable and safely exercisable with zero env vars set (local
 // dev without a provisioned database, or a build with no DATABASE_URL yet).
-// Every lib/sessions.ts / lib/profiles.ts function checks `db` for null first.
+// Every lib/sessions.ts / lib/profiles.ts / lib/trainingCompletions.ts
+// function checks `db` for null first.
 const connectionString = process.env.DATABASE_URL;
 export const db = connectionString
-  ? drizzle(neon(connectionString), { schema: { analysisSessions, goalkeeperProfiles } })
+  ? drizzle(neon(connectionString), {
+      schema: { analysisSessions, goalkeeperProfiles, trainingDrillCompletions },
+    })
   : null;

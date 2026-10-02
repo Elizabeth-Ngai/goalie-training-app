@@ -9,7 +9,7 @@
 // behavior — a missing DATABASE_URL in production should fail loudly, not
 // quietly run with history disabled. That visibility mechanism isn't built
 // in this phase; this comment is the flag for it.
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, ne, sql } from "drizzle-orm";
 import { analysisSessions, db } from "@/lib/db";
 import {
   GoalieReport,
@@ -202,6 +202,59 @@ export async function listAnalysisSessions(opts: {
     };
   } catch (error) {
     console.error("[sessions] list: failed");
+    return { ok: false, error: (error as Error).message };
+  }
+}
+
+// Full session details (including the full training_plan jsonb, unlike
+// listAnalysisSessions which deliberately omits it for the lighter history
+// list) for the most recent sessions OWNED by userId, excluding one specific
+// session in a single query. Built for Phase 6's adaptive-context assembly:
+// excludeSessionId is always the session currently being generated for, so
+// its own report/plan is never double-counted as "historical." A dedicated
+// query rather than weakening listAnalysisSessions's existing boundary,
+// matching the precedent set in Phase 5.
+export type RecentSessionDetail = {
+  id: string;
+  createdAt: Date;
+  report: Validated<GoalieReport>;
+  trainingPlan: Validated<TrainingPlan> | null;
+};
+
+export async function listRecentSessionDetails(
+  userId: string,
+  opts: { excludeSessionId?: string; limit: number }
+): Promise<DbResult<RecentSessionDetail[]>> {
+  if (!db) return { ok: false, error: "Database is not configured." };
+  try {
+    const whereClause = opts.excludeSessionId
+      ? and(eq(analysisSessions.userId, userId), ne(analysisSessions.id, opts.excludeSessionId))
+      : eq(analysisSessions.userId, userId);
+
+    const rows = await db
+      .select({
+        id: analysisSessions.id,
+        createdAt: analysisSessions.createdAt,
+        report: analysisSessions.report,
+        trainingPlan: analysisSessions.trainingPlan,
+      })
+      .from(analysisSessions)
+      .where(whereClause)
+      .orderBy(desc(analysisSessions.createdAt))
+      .limit(opts.limit);
+
+    return {
+      ok: true,
+      data: rows.map((row) => ({
+        id: row.id,
+        createdAt: row.createdAt,
+        report: toValidated(GoalieReportSchema.safeParse(row.report)),
+        trainingPlan:
+          row.trainingPlan === null ? null : toValidated(TrainingPlanSchema.safeParse(row.trainingPlan)),
+      })),
+    };
+  } catch (error) {
+    console.error("[sessions] list-recent-details: failed");
     return { ok: false, error: (error as Error).message };
   }
 }

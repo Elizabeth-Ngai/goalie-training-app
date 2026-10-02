@@ -301,6 +301,14 @@ export const TrainingDrillSchema = z.object({
   // from this id, so never trust addressesIssue independently of this field.
   addressesIssueId: z.string().nullable(),
   addressesIssue: z.string(),
+  // Stable per-drill identity (Phase 6), assigned server-side via
+  // assignDrillIds in lib/providers.ts — never produced by the model, never
+  // derived from title/position. Deliberately optional (not required): a
+  // plan persisted before this field existed has no drillId on any drill,
+  // and must still safeParse successfully so historical plans stay
+  // readable — the completion UI simply offers no "Mark Complete" control
+  // on a drill that lacks one.
+  drillId: z.string().optional(),
 });
 export type TrainingDrill = z.infer<typeof TrainingDrillSchema>;
 
@@ -403,6 +411,13 @@ export const AnalyzeVideoRequestSchema = z.object({
 export const TrainingPlanRequestSchema = z.object({
   report: GoalieReportSchema,
   playerInfo: PlayerInfoSchema,
+  // Optional, used ONLY to exclude this session from the user's own
+  // historical progress/training-history fetches when building adaptive
+  // context (Phase 6) — never used to load/replace `report` above, which
+  // stays client-supplied. If absent, adaptive context is not built at all
+  // (see lib/adaptiveTraining.ts) rather than risking double-counting the
+  // current report as if it were also historical.
+  analysisSessionId: z.uuid().optional(),
 });
 
 // ---------------------------------------------------------------------------
@@ -447,3 +462,22 @@ export const ProfileRequestSchema = z.object({
   defaults: GoalkeeperProfileDefaultsSchema,
 });
 export type ProfileRequest = z.infer<typeof ProfileRequestSchema>;
+
+// ---------------------------------------------------------------------------
+// (f) Training drill completion tracking (Phase 6)
+// ---------------------------------------------------------------------------
+
+export const COMPLETION_STATUSES = ["completed", "skipped"] as const;
+export const CompletionStatusSchema = z.enum(COMPLETION_STATUSES);
+export type CompletionStatus = z.infer<typeof CompletionStatusSchema>;
+
+export const SetCompletionRequestSchema = z.object({
+  drillId: z.string().min(1),
+  status: CompletionStatusSchema,
+});
+export type SetCompletionRequest = z.infer<typeof SetCompletionRequestSchema>;
+
+export const DeleteCompletionRequestSchema = z.object({
+  drillId: z.string().min(1),
+});
+export type DeleteCompletionRequest = z.infer<typeof DeleteCompletionRequestSchema>;
