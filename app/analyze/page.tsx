@@ -16,7 +16,13 @@ import PlayerInfoForm from "@/components/PlayerInfoForm";
 import TrainingPlanView from "@/components/TrainingPlanView";
 import AnalysisLoading from "@/components/AnalysisLoading";
 import ErrorPanel from "@/components/ErrorPanel";
-import ClipPlayer, { buildClipLabels, type ClipPlayerHandle } from "@/components/ClipPlayer";
+import ClipPlayer, {
+  buildClipLabels,
+  buildReportMarkers,
+  type ClipPlayerHandle,
+} from "@/components/ClipPlayer";
+import Panel from "@/components/ui/Panel";
+import { Button } from "@/components/ui/Button";
 
 type Stage = "upload" | "analyzing" | "analysis-ready" | "generating-plan" | "done" | "error";
 
@@ -419,13 +425,16 @@ export default function AnalyzePage() {
   const uploadedCount = playerClips.length;
   const isPartial = stage !== "upload" && analyzedCount > 0 && analyzedCount < uploadedCount;
   const showReviewArea = report !== null || stage === "analyzing";
+  const markers = report ? buildReportMarkers(report, playerClips[0]?.clipId) : [];
 
   return (
-    <main className="mx-auto max-w-5xl px-6 py-12">
-      <h1 className="text-3xl font-bold tracking-tight">AI Goalie</h1>
-      <p className="mt-2 text-muted">
-        Upload up to {MAX_CLIPS_PER_SESSION} goalkeeper clips from the same session for one combined
-        coaching analysis and training plan.
+    <main className="mx-auto max-w-5xl px-4 py-12 sm:px-14">
+      <h1 className="font-display text-3xl font-extrabold tracking-tight text-ink uppercase">
+        New Session
+      </h1>
+      <p className="mt-2 text-ink-soft">
+        Side or 3/4 angle, close enough to see your feet and hands. Up to {MAX_CLIPS_PER_SESSION}{" "}
+        clips from the same session, combined into one review.
       </p>
 
       <div className="mt-8 space-y-6">
@@ -437,16 +446,16 @@ export default function AnalyzePage() {
                 {clips.map((clip, index) => (
                   <li
                     key={clip.clipId}
-                    className="flex items-center justify-between gap-3 rounded-lg border border-border bg-surface px-4 py-3"
+                    className="flex items-center justify-between gap-3 rounded-btn border border-line bg-surface px-4 py-3"
                   >
-                    <span className="min-w-0 truncate text-sm">
+                    <span className="min-w-0 truncate text-sm text-ink-soft">
                       <span className="text-muted">Clip {index + 1} — </span>
                       {clip.videoFilename}
                     </span>
                     <button
                       type="button"
                       onClick={() => removeClip(clip.clipId)}
-                      className="shrink-0 text-xs font-medium text-muted hover:text-bad"
+                      className="shrink-0 text-xs font-semibold text-muted hover:text-danger"
                     >
                       Remove
                     </button>
@@ -456,7 +465,7 @@ export default function AnalyzePage() {
             )}
 
             {clips.length < MAX_CLIPS_PER_SESSION && (
-              <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border bg-surface px-6 py-10 text-center transition-colors hover:border-accent">
+              <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-card border-2 border-dashed border-line-strong bg-surface px-6 py-10 text-center transition-colors hover:border-accent">
                 <svg viewBox="0 0 24 24" fill="none" className="h-8 w-8 text-muted">
                   <path
                     d="M12 16V4m0 0l-4 4m4-4l4 4M4 16v3a1 1 0 001 1h14a1 1 0 001-1v-3"
@@ -466,7 +475,7 @@ export default function AnalyzePage() {
                     strokeLinejoin="round"
                   />
                 </svg>
-                <span className="font-medium">
+                <span className="font-semibold text-ink">
                   {clips.length === 0 ? "Click to choose clips" : "Add more clips"}
                 </span>
                 <span className="text-sm text-muted">
@@ -482,16 +491,12 @@ export default function AnalyzePage() {
               </label>
             )}
 
-            {uploadError && <p className="text-sm text-bad">{uploadError}</p>}
+            {uploadError && <p className="text-sm text-danger">{uploadError}</p>}
 
             {clips.length > 0 && (
-              <button
-                type="button"
-                onClick={analyzeAll}
-                className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground"
-              >
+              <Button type="button" onClick={analyzeAll}>
                 Analyze {clips.length} {clips.length === 1 ? "clip" : "clips"}
-              </button>
+              </Button>
             )}
           </div>
         )}
@@ -502,26 +507,26 @@ export default function AnalyzePage() {
             {clips.map((clip, index) => (
               <li
                 key={clip.clipId}
-                className="rounded-lg border border-border bg-surface px-4 py-3 text-sm"
+                className="rounded-btn border border-line bg-surface px-4 py-3 text-sm"
               >
                 <div className="flex items-center justify-between gap-3">
-                  <span className="min-w-0 truncate">
+                  <span className="min-w-0 truncate text-ink-soft">
                     <span className="text-muted">Clip {index + 1} — </span>
                     {clip.videoFilename}
                   </span>
                   <span
-                    className={`shrink-0 text-xs font-medium ${
+                    className={`shrink-0 text-xs font-semibold ${
                       clip.status === "failed"
-                        ? "text-bad"
+                        ? "text-danger"
                         : clip.status === "analyzed"
-                          ? "text-good"
+                          ? "text-accent"
                           : "text-muted"
                     }`}
                   >
                     {CLIP_STATUS_LABEL[clip.status]}
                   </span>
                 </div>
-                {clip.error && <p className="mt-1 text-xs text-bad">{clip.error}</p>}
+                {clip.error && <p className="mt-1 text-xs text-danger">{clip.error}</p>}
               </li>
             ))}
           </ul>
@@ -532,32 +537,30 @@ export default function AnalyzePage() {
           <div className="grid gap-6 lg:grid-cols-2 lg:gap-8">
             <div className="lg:sticky lg:top-6 lg:self-start">
               {playerClips.length > 0 ? (
-                <ClipPlayer ref={playerRef} clips={playerClips} />
+                <ClipPlayer ref={playerRef} clips={playerClips} markers={markers} />
               ) : (
-                <div className="rounded-xl border border-border bg-surface p-5 text-sm text-muted">
-                  Preparing your clips…
-                </div>
+                <Panel className="p-5 text-sm text-muted">Preparing your clips…</Panel>
               )}
             </div>
 
             <div>
-              {stage === "analyzing" && <AnalysisLoading label="Analyzing with AI Goalie..." />}
+              {stage === "analyzing" && <AnalysisLoading label="Reviewing your session..." />}
               {isPartial && report && (
-                <p className="mb-4 text-sm text-warn">
+                <p className="mb-4 text-sm text-focus">
                   Analysis based on {analyzedCount} of {uploadedCount} clips.
                 </p>
               )}
               {saveWarning && (
-                <div className="mb-4 rounded-xl border border-border bg-surface p-4">
-                  <p className="text-sm text-warn">{saveWarning}</p>
+                <Panel className="mb-4 p-4">
+                  <p className="text-sm text-focus">{saveWarning}</p>
                   <button
                     type="button"
                     onClick={retrySave}
-                    className="mt-2 text-sm font-medium text-accent"
+                    className="mt-2 text-sm font-bold text-accent"
                   >
                     Retry save
                   </button>
-                </div>
+                </Panel>
               )}
               {report && <GoalieReport report={report} onSeek={seekTo} clipLabels={clipLabels} />}
               {stage === "error" && errorContext === "analysis" && errorMessage && (

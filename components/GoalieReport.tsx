@@ -1,27 +1,8 @@
 import { GoalieReport as GoalieReportData } from "@/lib/schemas";
 import EvidenceWatch from "@/components/EvidenceWatch";
-
-function BulletList({
-  items,
-  className,
-}: {
-  items: string[];
-  className?: string;
-}) {
-  if (items.length === 0) return null;
-  return (
-    <ul className={`space-y-1 ${className ?? ""}`}>
-      {items.map((item, index) => (
-        <li key={index} className="flex gap-2 text-sm">
-          <span className="text-muted" aria-hidden>
-            •
-          </span>
-          <span>{item}</span>
-        </li>
-      ))}
-    </ul>
-  );
-}
+import Panel from "@/components/ui/Panel";
+import Eyebrow from "@/components/ui/Eyebrow";
+import PriorityCard from "@/components/ui/PriorityCard";
 
 export default function GoalieReport({
   report,
@@ -37,138 +18,73 @@ export default function GoalieReport({
 }) {
   return (
     <div className="space-y-6">
-      {/* Overall assessment */}
-      <section className="rounded-xl border border-border bg-surface p-5">
-        <h2 className="font-semibold">Overall Assessment</h2>
+      <Panel className="p-5">
+        <Eyebrow>Coach&apos;s read</Eyebrow>
         {report.sourceCount < 3 && (
-          <p className="mt-2 text-sm text-warn">
-            Analysis completed with limited evidence.
-          </p>
+          <p className="mt-2 text-sm text-focus">Analysis completed with limited evidence.</p>
         )}
-        <p className="mt-3 text-sm text-foreground">{report.summary}</p>
-      </section>
+        <p className="mt-3 text-sm text-ink-soft">{report.summary}</p>
 
-      {/* Top things to work on */}
-      <section className="rounded-xl border border-border bg-surface p-5">
-        <h2 className="font-semibold">Top Things to Work On</h2>
-        <ol className="mt-4 space-y-6">
+        <ol className="mt-6 space-y-6">
           {report.topPriorities.map((priority, index) => (
-            <li
-              key={priority.id}
-              className="border-t border-border pt-5 first:border-t-0 first:pt-0"
-            >
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-                <h3 className="text-base font-semibold">
-                  {index + 1}. {priority.title}
-                </h3>
-                <EvidenceWatch
-                  timestamp={priority.timestamp}
-                  evidenceReferences={priority.evidenceReferences}
-                  clipLabels={clipLabels}
-                  onSeek={onSeek}
-                />
-              </div>
-
-              <div className="mt-3 space-y-3">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted">
-                    What I See
-                  </p>
-                  <BulletList items={priority.observations} className="mt-1" />
-                </div>
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted">
-                    Why It Matters
-                  </p>
-                  <BulletList items={priority.whyItMatters} className="mt-1" />
-                </div>
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted">
-                    How to Improve
-                  </p>
-                  <BulletList items={priority.howToImprove} className="mt-1" />
-                </div>
-              </div>
-
-              <p className="mt-3 text-sm">
-                <span className="font-medium text-accent">Drill: </span>
-                <span className="font-medium">{priority.recommendedDrill.name}</span>
-                <span className="text-muted"> — {priority.recommendedDrill.purpose}</span>
-              </p>
+            <li key={priority.id}>
+              <PriorityCard priority={priority} index={index} onSeek={onSeek} clipLabels={clipLabels} />
             </li>
           ))}
         </ol>
-      </section>
 
-      {/* What you did well */}
-      {report.strengths.length > 0 && (
-        <section className="rounded-xl border border-border bg-surface p-5">
-          <h2 className="font-semibold text-good">What You Did Well</h2>
-          <ul className="mt-4 space-y-4">
-            {report.strengths.map((strength, index) => (
-              <li key={index}>
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-                  <p className="font-medium">
-                    <span className="text-good" aria-hidden>
-                      ✓{" "}
-                    </span>
+        {report.strengths.length > 0 && (
+          <div className="mt-6 border-t border-line pt-5">
+            <Eyebrow tone="accent">What you did well</Eyebrow>
+            <ul className="mt-3 flex flex-wrap gap-2">
+              {report.strengths.map((strength, index) => (
+                <li key={index}>
+                  <span className="inline-flex items-center rounded-btn border border-accent px-3 py-1.5 text-xs font-bold tracking-wide text-accent uppercase">
                     {strength.title}
-                  </p>
-                  <EvidenceWatch
-                    timestamp={strength.timestamp}
-                    evidenceReferences={strength.evidenceReferences}
-                    clipLabels={clipLabels}
-                    onSeek={onSeek}
-                  />
-                </div>
-                <BulletList items={strength.points} className="mt-1" />
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </Panel>
 
-      {/* Key moments */}
       {report.keyMoments.length > 0 && (
-        <section className="rounded-xl border border-border bg-surface p-5">
-          <h2 className="font-semibold">Key Moments</h2>
+        <Panel className="p-5">
+          <Eyebrow>Key moments</Eyebrow>
           <ul className="mt-4 space-y-4">
             {report.keyMoments.map((moment, index) => (
-              <li
-                key={index}
-                className="border-t border-border pt-4 first:border-t-0 first:pt-0"
-              >
+              <li key={index} className="border-t border-line pt-4 first:border-t-0 first:pt-0">
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                  {moment.label && <span className="text-sm font-semibold text-ink">{moment.label}</span>}
+                </div>
+                <p className="mt-1 text-sm text-ink-soft">{moment.description}</p>
+                <div className="mt-2">
                   <EvidenceWatch
                     timestamp={moment.timestamp}
                     evidenceReferences={moment.evidenceReferences}
                     clipLabels={clipLabels}
                     onSeek={onSeek}
                   />
-                  {moment.label && (
-                    <span className="text-sm font-medium">{moment.label}</span>
-                  )}
                 </div>
-                <p className="mt-1 text-sm text-muted">{moment.description}</p>
               </li>
             ))}
           </ul>
-        </section>
+        </Panel>
       )}
 
-      {/* Recommended drills */}
       {report.recommendedDrills.length > 0 && (
-        <section className="rounded-xl border border-border bg-surface p-5">
-          <h2 className="font-semibold">Recommended Drills</h2>
+        <Panel className="p-5">
+          <Eyebrow>Recommended drills</Eyebrow>
           <ul className="mt-3 space-y-2 text-sm">
             {report.recommendedDrills.map((drill, index) => (
               <li key={index}>
-                <span className="font-medium">{drill.name}</span>
+                <span className="font-semibold text-ink">{drill.name}</span>
                 <span className="text-muted"> — {drill.purpose}</span>
               </li>
             ))}
           </ul>
-        </section>
+        </Panel>
       )}
     </div>
   );

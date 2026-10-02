@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import GoalkeeperProfileForm from "@/components/GoalkeeperProfileForm";
+import Panel from "@/components/ui/Panel";
 import type { GoalkeeperProfileDefaults } from "@/lib/schemas";
 
 // Access is enforced by proxy.ts (signed-out users are redirected to sign-in
@@ -47,18 +48,20 @@ export default function ProfilePage() {
   }
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-12">
-      <h1 className="text-3xl font-bold tracking-tight">Profile</h1>
+    <main className="mx-auto max-w-3xl px-4 py-12 sm:px-14">
+      <h1 className="font-display text-3xl font-extrabold tracking-tight text-ink uppercase">
+        Profile
+      </h1>
       <p className="mt-2 text-muted">
-        Set your default training preferences once and we&apos;ll prefill them
-        whenever you analyze a video.
+        Set your default training preferences once and we&apos;ll prefill them whenever you analyze
+        a video.
       </p>
 
       <div className="mt-8">
         {loading ? (
-          <div className="rounded-xl border border-border bg-surface p-5">
+          <Panel className="p-5">
             <p className="text-sm text-muted">Loading your profile...</p>
-          </div>
+          </Panel>
         ) : (
           <>
             {/* key forces the form to re-seed from loaded defaults on first load
@@ -69,11 +72,9 @@ export default function ProfilePage() {
               onSubmit={handleSave}
               submitting={status === "saving"}
             />
-            {status === "saved" && (
-              <p className="mt-3 text-sm text-good">Profile saved.</p>
-            )}
+            {status === "saved" && <p className="mt-3 text-sm text-accent">Profile saved.</p>}
             {status === "error" && (
-              <p className="mt-3 text-sm text-bad">
+              <p className="mt-3 text-sm text-danger">
                 We couldn&apos;t save your profile. Please try again.
               </p>
             )}

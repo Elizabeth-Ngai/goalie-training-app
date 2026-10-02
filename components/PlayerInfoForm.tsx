@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { PLAYING_LEVELS, PlayerInfo, PlayerInfoSchema, WEEKDAYS } from "@/lib/schemas";
+import { Button } from "@/components/ui/Button";
 
 const EQUIPMENT_OPTIONS = ["Cones", "Balls", "Goal", "Wall", "Gloves", "Resistance band"];
 const DURATION_OPTIONS = [30, 45, 60, 90];
@@ -69,17 +70,16 @@ export default function PlayerInfoForm({
   }
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      className="rounded-xl border border-border bg-surface p-5"
-    >
-      <h2 className="font-semibold">Your Training Information</h2>
-      <p className="mt-1 text-sm text-muted">
-        Tell us about yourself so AI Goalie can personalize your training plan.
+    <form onSubmit={handleSubmit} className="rounded-card border border-line bg-surface p-5">
+      <h2 className="font-display text-xl font-extrabold tracking-tight text-ink uppercase">
+        Your Training Information
+      </h2>
+      <p className="mt-1 text-sm text-ink-soft">
+        Tell us about yourself so we can personalize your training plan.
       </p>
 
       <div className="mt-4 grid gap-4 sm:grid-cols-2">
-        <label className="text-sm">
+        <label className="text-sm text-ink-soft">
           Age
           <input
             type="number"
@@ -87,18 +87,18 @@ export default function PlayerInfoForm({
             max={60}
             value={age}
             onChange={(e) => setAge(e.target.value)}
-            className="mt-1 w-full rounded-lg border border-border bg-surface-raised px-3 py-2"
+            className="mt-1 w-full rounded-btn border border-line bg-surface-2 px-3 py-2 text-ink"
           />
         </label>
 
-        <label className="text-sm">
+        <label className="text-sm text-ink-soft">
           Playing level
           <select
             value={playingLevel}
             onChange={(e) =>
               setPlayingLevel(e.target.value as (typeof PLAYING_LEVELS)[number])
             }
-            className="mt-1 w-full rounded-lg border border-border bg-surface-raised px-3 py-2 capitalize"
+            className="mt-1 w-full rounded-btn border border-line bg-surface-2 px-3 py-2 text-ink capitalize"
           >
             {PLAYING_LEVELS.map((level) => (
               <option key={level} value={level}>
@@ -109,29 +109,29 @@ export default function PlayerInfoForm({
         </label>
       </div>
 
-      <label className="mt-4 block text-sm">
+      <label className="mt-4 block text-sm text-ink-soft">
         Training goal
         <input
           type="text"
           placeholder="e.g. Improve diving technique before tryouts"
           value={trainingGoal}
           onChange={(e) => setTrainingGoal(e.target.value)}
-          className="mt-1 w-full rounded-lg border border-border bg-surface-raised px-3 py-2"
+          className="mt-1 w-full rounded-btn border border-line bg-surface-2 px-3 py-2 text-ink"
         />
       </label>
 
       <div className="mt-4">
-        <p className="text-sm">Available days</p>
+        <p className="text-sm text-ink-soft">Available days</p>
         <div className="mt-2 flex flex-wrap gap-2">
           {WEEKDAYS.map((day) => (
             <button
               key={day}
               type="button"
               onClick={() => toggleDay(day)}
-              className={`rounded-lg border px-3 py-1.5 text-sm ${
+              className={`min-h-11 rounded-btn border px-3 py-1.5 text-sm font-semibold transition-colors ${
                 availableDays.includes(day)
-                  ? "border-accent bg-accent text-accent-foreground"
-                  : "border-border bg-surface-raised hover:border-accent"
+                  ? "border-accent bg-accent text-ground"
+                  : "border-line bg-surface-2 text-ink-soft hover:border-accent"
               }`}
             >
               {day}
@@ -140,12 +140,12 @@ export default function PlayerInfoForm({
         </div>
       </div>
 
-      <label className="mt-4 block text-sm">
+      <label className="mt-4 block text-sm text-ink-soft">
         Session duration
         <select
           value={sessionDurationMinutes}
           onChange={(e) => setSessionDurationMinutes(Number(e.target.value))}
-          className="mt-1 w-full rounded-lg border border-border bg-surface-raised px-3 py-2"
+          className="mt-1 w-full rounded-btn border border-line bg-surface-2 px-3 py-2 text-ink"
         >
           {DURATION_OPTIONS.map((minutes) => (
             <option key={minutes} value={minutes}>
@@ -156,17 +156,17 @@ export default function PlayerInfoForm({
       </label>
 
       <div className="mt-4">
-        <p className="text-sm">Available equipment</p>
+        <p className="text-sm text-ink-soft">Available equipment</p>
         <div className="mt-2 flex flex-wrap gap-2">
           {EQUIPMENT_OPTIONS.map((item) => (
             <button
               key={item}
               type="button"
               onClick={() => toggleEquipment(item)}
-              className={`rounded-lg border px-3 py-1.5 text-sm ${
+              className={`min-h-11 rounded-btn border px-3 py-1.5 text-sm font-semibold transition-colors ${
                 equipment.includes(item)
-                  ? "border-accent bg-accent text-accent-foreground"
-                  : "border-border bg-surface-raised hover:border-accent"
+                  ? "border-accent bg-accent text-ground"
+                  : "border-line bg-surface-2 text-ink-soft hover:border-accent"
               }`}
             >
               {item}
@@ -175,7 +175,7 @@ export default function PlayerInfoForm({
         </div>
       </div>
 
-      <label className="mt-4 flex items-center gap-2 text-sm">
+      <label className="mt-4 flex items-center gap-2 text-sm text-ink-soft">
         <input
           type="checkbox"
           checked={hasTrainingPartner}
@@ -184,15 +184,11 @@ export default function PlayerInfoForm({
         I have a coach or training partner available
       </label>
 
-      {error && <p className="mt-4 text-sm text-bad">{error}</p>}
+      {error && <p className="mt-4 text-sm text-danger">{error}</p>}
 
-      <button
-        type="submit"
-        disabled={submitting}
-        className="mt-5 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground disabled:opacity-60"
-      >
+      <Button type="submit" disabled={submitting} className="mt-5">
         {submitting ? "Generating..." : "Generate My Training Plan"}
-      </button>
+      </Button>
     </form>
   );
 }

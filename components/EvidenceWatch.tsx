@@ -26,7 +26,7 @@ export default function EvidenceWatch({
 }) {
   if (evidenceReferences && evidenceReferences.length > 0) {
     return (
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-col gap-2">
         {evidenceReferences.map((ref, index) => (
           <WatchButton
             key={`${ref.clipId}-${ref.timestamp}-${index}`}

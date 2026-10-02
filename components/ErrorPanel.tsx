@@ -1,3 +1,5 @@
+import { Button } from "@/components/ui/Button";
+
 export default function ErrorPanel({
   message,
   onRetry,
@@ -6,14 +8,11 @@ export default function ErrorPanel({
   onRetry: () => void;
 }) {
   return (
-    <div className="rounded-xl border border-border bg-surface p-5">
-      <p className="text-sm text-bad">{message}</p>
-      <button
-        onClick={onRetry}
-        className="mt-4 rounded-lg bg-accent px-3 py-1.5 text-sm font-medium text-accent-foreground"
-      >
+    <div className="rounded-card border border-line bg-surface p-5">
+      <p className="text-sm text-danger">{message}</p>
+      <Button type="button" onClick={onRetry} className="mt-4">
         Try Again
-      </button>
+      </Button>
     </div>
   );
 }

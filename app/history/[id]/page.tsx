@@ -18,9 +18,9 @@ export default async function SessionPage({ params }: { params: Promise<{ id: st
 
   if (!result.ok) {
     return (
-      <main className="mx-auto max-w-5xl px-6 py-12">
-        <div className="rounded-xl border border-border bg-surface p-5">
-          <p className="text-sm text-bad">We couldn&apos;t load this analysis. Please try again.</p>
+      <main className="mx-auto max-w-5xl px-4 py-12 sm:px-14">
+        <div className="rounded-card border border-line bg-surface p-5">
+          <p className="text-sm text-danger">We couldn&apos;t load this session. Please try again.</p>
         </div>
       </main>
     );
@@ -36,7 +36,7 @@ export default async function SessionPage({ params }: { params: Promise<{ id: st
   const initialCompletions = completionsResult.ok ? completionsResult.data : {};
 
   return (
-    <main className="mx-auto max-w-5xl px-6 py-12">
+    <main className="mx-auto max-w-5xl px-4 py-12 sm:px-14">
       <SessionDetailView session={result.data} initialCompletions={initialCompletions} />
     </main>
   );

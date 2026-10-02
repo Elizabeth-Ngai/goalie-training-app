@@ -10,28 +10,23 @@ import {
   sumTrainingMinutes,
 } from "@/lib/trainingPlanStats";
 import EvidenceWatch from "@/components/EvidenceWatch";
+import Eyebrow from "@/components/ui/Eyebrow";
 
 function StatTile({ value, label }: { value: string | number; label: string }) {
   return (
-    <div className="rounded-lg border border-border bg-surface-raised p-3 text-center">
-      <p className="text-lg font-semibold">{value}</p>
+    <div className="rounded-btn border border-line bg-surface-2 p-3 text-center">
+      <p className="font-display text-xl font-bold text-ink">{value}</p>
       <p className="text-xs text-muted">{label}</p>
     </div>
   );
 }
 
-function WeeklySummary({
-  days,
-  priorities,
-}: {
-  days: TrainingDay[];
-  priorities: ReportPriority[];
-}) {
+function WeeklySummary({ days, priorities }: { days: TrainingDay[]; priorities: ReportPriority[] }) {
   const { primary, secondary } = computeFocusAreas(days, priorities);
 
   return (
     <div className="mt-4">
-      <h3 className="text-xs font-semibold uppercase tracking-wide text-muted">Your Week</h3>
+      <Eyebrow>Your week</Eyebrow>
       <div className="mt-2 grid grid-cols-3 gap-2">
         <StatTile value={countTrainingDays(days)} label="Training Days" />
         <StatTile value={sumTrainingMinutes(days)} label="Total Minutes" />
@@ -41,18 +36,14 @@ function WeeklySummary({
         <div className="mt-3 flex flex-wrap gap-4">
           {primary && (
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted">
-                Primary Focus
-              </p>
-              <p className="text-sm font-medium text-accent">{primary.title}</p>
+              <Eyebrow>Primary focus</Eyebrow>
+              <p className="text-sm font-semibold text-accent">{primary.title}</p>
             </div>
           )}
           {secondary && (
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted">
-                Secondary Focus
-              </p>
-              <p className="text-sm font-medium">{secondary.title}</p>
+              <Eyebrow>Secondary focus</Eyebrow>
+              <p className="text-sm font-semibold text-ink">{secondary.title}</p>
             </div>
           )}
         </div>
@@ -80,12 +71,12 @@ function DaySelector({
             type="button"
             aria-current={selected ? "true" : undefined}
             onClick={() => onSelect(index)}
-            className={`flex min-h-14 flex-shrink-0 flex-col items-center justify-center gap-0.5 rounded-lg border px-3 py-2 text-xs font-medium transition-colors ${
+            className={`flex min-h-14 flex-shrink-0 flex-col items-center justify-center gap-0.5 rounded-btn border px-3 py-2 text-xs font-semibold transition-colors ${
               selected
-                ? "border-accent bg-accent text-accent-foreground"
+                ? "border-accent bg-accent text-ground"
                 : day.isRestDay
-                  ? "border-dashed border-border bg-surface text-muted hover:border-accent"
-                  : "border-border bg-surface-raised text-foreground hover:border-accent"
+                  ? "border-dashed border-line bg-surface text-muted hover:border-accent"
+                  : "border-line bg-surface-2 text-ink hover:border-accent"
             }`}
           >
             <span>{day.day}</span>
@@ -111,11 +102,11 @@ function CompletionControl({
   if (status === "completed") {
     return (
       <div className="mt-2 flex items-center gap-3">
-        <span className="text-xs font-medium text-good">✓ Completed</span>
+        <span className="text-xs font-bold text-accent">✓ Completed</span>
         <button
           type="button"
           onClick={() => onSetCompletionStatus(drillId, null)}
-          className="min-h-8 text-xs font-medium text-muted hover:text-foreground"
+          className="min-h-8 text-xs font-semibold text-muted hover:text-ink"
         >
           Undo
         </button>
@@ -126,11 +117,11 @@ function CompletionControl({
   if (status === "skipped") {
     return (
       <div className="mt-2 flex items-center gap-3">
-        <span className="text-xs font-medium text-muted">Skipped</span>
+        <span className="text-xs font-semibold text-muted">Skipped</span>
         <button
           type="button"
           onClick={() => onSetCompletionStatus(drillId, null)}
-          className="min-h-8 text-xs font-medium text-muted hover:text-foreground"
+          className="min-h-8 text-xs font-semibold text-muted hover:text-ink"
         >
           Undo
         </button>
@@ -143,14 +134,14 @@ function CompletionControl({
       <button
         type="button"
         onClick={() => onSetCompletionStatus(drillId, "completed")}
-        className="min-h-8 text-xs font-medium text-accent"
+        className="min-h-8 text-xs font-bold text-accent"
       >
         Mark Complete
       </button>
       <button
         type="button"
         onClick={() => onSetCompletionStatus(drillId, "skipped")}
-        className="min-h-8 text-xs font-medium text-muted hover:text-foreground"
+        className="min-h-8 text-xs font-semibold text-muted hover:text-ink"
       >
         Mark Skipped
       </button>
@@ -176,21 +167,21 @@ function DrillCard({
   const [open, setOpen] = useState(false);
   const instructionsId = useId();
   const linkedPriority = drill.addressesIssueId
-    ? priorities.find((p) => p.id === drill.addressesIssueId) ?? null
+    ? (priorities.find((p) => p.id === drill.addressesIssueId) ?? null)
     : null;
 
   const hasSetsOrReps =
     drill.sets != null || drill.repsOrDuration !== "" || drill.restSeconds != null;
 
   return (
-    <li className="border-t border-border pt-4 first:border-t-0 first:pt-0">
-      <p className="text-sm font-semibold">{drill.name}</p>
+    <li className="border-t border-line pt-4 first:border-t-0 first:pt-0">
+      <p className="text-sm font-semibold text-ink">{drill.name}</p>
       <p className="mt-0.5 text-sm text-muted">{drill.purpose}</p>
 
       {linkedPriority && (
-        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+        <div className="mt-2 space-y-2">
           <p className="text-xs text-muted">
-            <span className="font-semibold uppercase tracking-wide">Addresses </span>
+            <span className="font-bold tracking-wide uppercase">Addresses </span>
             {linkedPriority.title}
           </p>
           <EvidenceWatch
@@ -217,14 +208,14 @@ function DrillCard({
             aria-expanded={open}
             aria-controls={instructionsId}
             onClick={() => setOpen((o) => !o)}
-            className="min-h-8 text-xs font-medium text-accent"
+            className="min-h-8 text-xs font-bold text-accent"
           >
             How to Perform {open ? "▲" : "▼"}
           </button>
           {open && (
             <ul id={instructionsId} className="mt-2 space-y-1">
               {drill.instructions.map((step, index) => (
-                <li key={index} className="flex gap-2 text-sm">
+                <li key={index} className="flex gap-2 text-sm text-ink-soft">
                   <span className="text-muted" aria-hidden>
                     •
                   </span>
@@ -265,9 +256,9 @@ function DayDetail({
   onSetCompletionStatus?: (drillId: string, status: "completed" | "skipped" | null) => void;
 }) {
   return (
-    <div className="mt-4 rounded-xl border border-border bg-surface-raised p-4">
+    <div className="mt-4 rounded-card border border-line bg-surface-2 p-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <p className="font-semibold">{day.day}</p>
+        <p className="font-semibold text-ink">{day.day}</p>
         {!day.isRestDay && (
           <span className="text-xs text-muted">
             {day.durationMinutes} min · {day.drills.length} drills
@@ -324,18 +315,18 @@ export default function TrainingPlanView({
   const selectedDay = plan.days[selectedIndex] ?? plan.days[0];
 
   return (
-    <div className="rounded-xl border border-border bg-surface p-5">
-      <h2 className="font-semibold">Your Training Plan</h2>
-      <p className="mt-2 text-sm text-muted">{plan.overview}</p>
+    <div className="rounded-card border border-line bg-surface p-5">
+      <h2 className="font-display text-xl font-extrabold tracking-tight text-ink uppercase">
+        Your Training Plan
+      </h2>
+      <p className="mt-2 text-sm text-ink-soft">{plan.overview}</p>
 
       {adaptationNotes && adaptationNotes.length > 0 && (
-        <div className="mt-3 rounded-lg border border-border bg-surface-raised p-3">
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted">
-            How this plan was adapted
-          </p>
+        <div className="mt-3 rounded-btn border border-line bg-surface-2 p-3">
+          <Eyebrow>How this plan was adapted</Eyebrow>
           <ul className="mt-2 space-y-1">
             {adaptationNotes.map((note, index) => (
-              <li key={index} className="flex gap-2 text-sm text-muted">
+              <li key={index} className="flex gap-2 text-sm text-ink-soft">
                 <span aria-hidden>•</span>
                 <span>{note}</span>
               </li>
@@ -346,9 +337,9 @@ export default function TrainingPlanView({
 
       <WeeklySummary days={plan.days} priorities={priorities} />
 
-      <h3 className="mt-5 text-xs font-semibold uppercase tracking-wide text-muted">
-        This Week
-      </h3>
+      <div className="mt-5">
+        <Eyebrow>This week</Eyebrow>
+      </div>
       <DaySelector days={plan.days} selectedIndex={selectedIndex} onSelect={setSelectedIndex} />
 
       {selectedDay && (

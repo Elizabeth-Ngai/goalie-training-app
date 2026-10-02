@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { auth } from "@clerk/nextjs/server";
-import { listAnalysisSessions, type SessionListItem } from "@/lib/sessions";
+import { listAnalysisSessions } from "@/lib/sessions";
 import {
   computeCategoryInsights,
   buildProgressSummary,
@@ -13,88 +13,55 @@ import {
   type CategoryInsight,
   type ProgressSession,
 } from "@/lib/progress";
-import type { RubricCategory } from "@/lib/schemas";
+import { buildCategoryTrend, getCategoryTag, CATEGORY_LABELS } from "@/lib/categoryDisplay";
+import Panel from "@/components/ui/Panel";
+import Eyebrow from "@/components/ui/Eyebrow";
+import TrendBar from "@/components/ui/TrendBar";
+import { ButtonLink } from "@/components/ui/Button";
+import SessionRow, { formatRowDate } from "@/components/SessionRow";
 
 // Reads the authenticated user's own sessions on every request — never
 // statically prerendered/cached. Computed entirely from already-persisted
 // GoalieReports: zero calls to OpenAI/Gemini/Claude.
 export const dynamic = "force-dynamic";
 
-const STATUS_LABELS: Record<CategoryInsight["status"], string> = {
-  "recurring-focus": "Recurring focus",
-  "recent-focus": "Recent focus",
-  improving: "Improving",
-  "consistent-strength": "Consistent strength",
-  "not-enough-evidence": "Not enough evidence",
-};
+function InsightCard({ insight, sessions }: { insight: CategoryInsight; sessions: ProgressSession[] }) {
+  const tag = getCategoryTag(insight.status);
+  const trend = buildCategoryTrend(insight, sessions);
+  const tagToneClass =
+    tag.tone === "accent" ? "text-accent" : tag.tone === "focus" ? "text-focus" : "text-muted";
 
-const CATEGORY_LABELS: Record<RubricCategory, string> = {
-  positioning: "Positioning",
-  setPosition: "Set Position",
-  footwork: "Footwork",
-  decisionMaking: "Decision Making",
-  diving: "Diving",
-  handling: "Handling",
-  landing: "Landing",
-  recovery: "Recovery",
-  distribution: "Distribution",
-};
-
-function formatDate(date: Date) {
-  return date.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
-}
-
-function InsightCard({ insight }: { insight: CategoryInsight }) {
   return (
-    <div className="rounded-xl border border-border bg-surface p-4">
-      <p className="font-semibold">{CATEGORY_LABELS[insight.category]}</p>
-      <p className="mt-1 text-xs font-medium uppercase tracking-wide text-accent">
-        {STATUS_LABELS[insight.status]}
+    <Panel className="p-4">
+      <div className="flex items-baseline justify-between gap-2">
+        <p className="font-semibold text-ink">{CATEGORY_LABELS[insight.category]}</p>
+        <p className={`text-xs font-bold uppercase tracking-wide ${tagToneClass}`}>{tag.label}</p>
+      </div>
+      <div className="mt-3">
+        <TrendBar segments={trend.segments} tone={trend.tone} />
+      </div>
+      <p className="mt-2 text-xs text-muted">
+        {trend.captionLabel} {trend.windowCount} of {trend.windowSize}
       </p>
-      <p className="mt-2 text-sm text-muted">{insight.explanation}</p>
+      <p className="mt-2 text-sm text-ink-soft">{insight.explanation}</p>
       {insight.evidence.length > 0 && (
         <ul className="mt-3 space-y-1">
           {insight.evidence.map((e, i) => (
-            <li key={i} className="text-xs">
-              <Link href={`/history/${e.sessionId}`} className="text-accent hover:underline">
-                {formatDate(e.createdAt)} — {e.title}
+            <li key={i}>
+              <Link
+                href={`/history/${e.sessionId}`}
+                className="flex items-baseline gap-2 py-0.5 text-xs transition-colors hover:text-accent"
+              >
+                <span className="font-display font-semibold text-muted">
+                  {formatRowDate(e.createdAt)}
+                </span>
+                <span className="truncate text-ink-soft">{e.title}</span>
               </Link>
             </li>
           ))}
         </ul>
       )}
-    </div>
-  );
-}
-
-function TimelineItem({ item }: { item: SessionListItem }) {
-  const topPriorityTitle = item.report.valid ? item.report.data.topPriorities[0]?.title : null;
-  const strengthCount = item.report.valid ? item.report.data.strengths.length : null;
-
-  return (
-    <li className="rounded-xl border border-border bg-surface p-4">
-      <Link href={`/history/${item.id}`} className="block">
-        <p className="text-sm text-muted">{formatDate(item.createdAt)}</p>
-        <p className="mt-1 font-medium">{item.videoFilename}</p>
-        {item.report.valid ? (
-          <div className="mt-2 space-y-0.5 text-sm">
-            {topPriorityTitle && (
-              <p>
-                <span className="text-muted">Top Priority: </span>
-                {topPriorityTitle}
-              </p>
-            )}
-            {strengthCount !== null && (
-              <p className="text-muted">
-                {strengthCount} {strengthCount === 1 ? "Strength" : "Strengths"}
-              </p>
-            )}
-          </div>
-        ) : (
-          <p className="mt-2 text-sm text-bad">This session&apos;s saved report could not be loaded.</p>
-        )}
-      </Link>
-    </li>
+    </Panel>
   );
 }
 
@@ -109,10 +76,10 @@ export default async function ProgressPage() {
 
   if (!result.ok) {
     return (
-      <main className="mx-auto max-w-3xl px-6 py-12">
-        <div className="rounded-xl border border-border bg-surface p-5">
-          <p className="text-sm text-bad">We couldn&apos;t load your progress.</p>
-        </div>
+      <main className="mx-auto max-w-3xl px-4 py-12 sm:px-14">
+        <Panel className="p-5">
+          <p className="text-sm text-danger">We couldn&apos;t load your progress.</p>
+        </Panel>
       </main>
     );
   }
@@ -121,20 +88,19 @@ export default async function ProgressPage() {
 
   if (sessions.length === 0) {
     return (
-      <main className="mx-auto max-w-3xl px-6 py-12">
-        <h1 className="text-3xl font-bold tracking-tight">Your Progress</h1>
-        <div className="mt-8 rounded-xl border border-border bg-surface p-5 text-center">
-          <h2 className="font-semibold">No progress data yet</h2>
+      <main className="mx-auto max-w-3xl px-4 py-12 sm:px-14">
+        <h1 className="font-display text-3xl font-extrabold tracking-tight text-ink uppercase">
+          Progress
+        </h1>
+        <Panel className="mt-8 p-5 text-center">
+          <h2 className="font-semibold text-ink">No progress data yet</h2>
           <p className="mt-2 text-sm text-muted">
-            Your development insights will appear here once you&apos;ve analyzed a video.
+            Your development insights will appear here once you&apos;ve reviewed a session.
           </p>
-          <Link
-            href="/analyze"
-            className="mt-4 inline-block rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground"
-          >
-            Analyze Your First Video
-          </Link>
-        </div>
+          <ButtonLink href="/analyze" variant="primary" className="mt-4">
+            Analyze your first video
+          </ButtonLink>
+        </Panel>
       </main>
     );
   }
@@ -154,53 +120,52 @@ export default async function ProgressPage() {
   const developmentOverview = [...recurring, ...recentFocus, ...improving, ...consistentStrengths];
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-12">
-      <h1 className="text-3xl font-bold tracking-tight">Your Progress</h1>
+    <main className="mx-auto max-w-3xl px-4 py-12 sm:px-14">
+      <h1 className="font-display text-3xl font-extrabold tracking-tight text-ink uppercase">
+        Progress
+      </h1>
       <p className="mt-2 text-muted">
-        Based on {sessions.length} goalkeeper {sessions.length === 1 ? "analysis" : "analyses"}
+        Based on {sessions.length} goalkeeper {sessions.length === 1 ? "session" : "sessions"}
         {summary.firstAnalysisAt && summary.latestAnalysisAt && (
           <>
             {" "}
-            · First: {formatDate(summary.firstAnalysisAt)} · Latest: {formatDate(summary.latestAnalysisAt)}
+            · First: {formatRowDate(summary.firstAnalysisAt)} · Latest:{" "}
+            {formatRowDate(summary.latestAnalysisAt)}
           </>
         )}
       </p>
 
       {!hasEnoughForTrends && (
-        <div className="mt-6 rounded-xl border border-border bg-surface p-5">
+        <Panel className="mt-6 p-5">
           <p className="text-sm text-muted">
             {validSessions.length === 1
-              ? "Analyze a few more videos before we can start identifying patterns over time."
-              : "A couple more analyses will let us start identifying patterns — for now, here's what each one found."}
+              ? "Review a few more sessions before we can start identifying patterns over time."
+              : "A couple more sessions will let us start identifying patterns — for now, here's what each one found."}
           </p>
-        </div>
+        </Panel>
       )}
 
       {hasEnoughForTrends && developmentOverview.length > 0 && (
         <section className="mt-8">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">
-            Development Overview
-          </h2>
+          <Eyebrow>Development overview</Eyebrow>
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
             {developmentOverview.map((insight) => (
-              <InsightCard key={insight.category} insight={insight} />
+              <InsightCard key={insight.category} insight={insight} sessions={validSessions} />
             ))}
           </div>
           <p className="mt-3 text-xs text-muted">
-            These are patterns in what AI Goalie has flagged across your analyses — not an overall
-            skill ranking or score.
+            These are patterns in what we&apos;ve flagged across your sessions — not an overall skill
+            ranking or score.
           </p>
         </section>
       )}
 
       {hasEnoughForTrends && (recurring.length > 0 || recentFocus.length > 0) && (
         <section className="mt-8">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">
-            Current Development Priorities
-          </h2>
+          <Eyebrow>Current development priorities</Eyebrow>
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
             {[...recurring, ...recentFocus].map((insight) => (
-              <InsightCard key={insight.category} insight={insight} />
+              <InsightCard key={insight.category} insight={insight} sessions={validSessions} />
             ))}
           </div>
         </section>
@@ -208,12 +173,10 @@ export default async function ProgressPage() {
 
       {hasEnoughForTrends && improving.length > 0 && (
         <section className="mt-8">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">
-            Recent Improvements
-          </h2>
+          <Eyebrow>Recent improvements</Eyebrow>
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
             {improving.map((insight) => (
-              <InsightCard key={insight.category} insight={insight} />
+              <InsightCard key={insight.category} insight={insight} sessions={validSessions} />
             ))}
           </div>
         </section>
@@ -221,24 +184,20 @@ export default async function ProgressPage() {
 
       {hasEnoughForTrends && consistentStrengths.length > 0 && (
         <section className="mt-8">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">
-            Consistent Strengths
-          </h2>
+          <Eyebrow>Consistent strengths</Eyebrow>
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
             {consistentStrengths.map((insight) => (
-              <InsightCard key={insight.category} insight={insight} />
+              <InsightCard key={insight.category} insight={insight} sessions={validSessions} />
             ))}
           </div>
         </section>
       )}
 
       <section className="mt-8">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">
-          Analysis Timeline
-        </h2>
-        <ul className="mt-3 space-y-3">
+        <Eyebrow>Session timeline</Eyebrow>
+        <ul className="mt-3 border-t border-line">
           {sessions.map((item) => (
-            <TimelineItem key={item.id} item={item} />
+            <SessionRow key={item.id} item={item} />
           ))}
         </ul>
       </section>

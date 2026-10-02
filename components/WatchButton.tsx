@@ -1,14 +1,14 @@
 import { parseTimestamp } from "@/lib/time";
 
-// Small interactive control rendered next to any timestamped observation.
-// Parsing is centralized in parseTimestamp; if the timestamp is missing or
-// malformed it returns null and we render nothing rather than a broken button.
+// The "TimestampButton" primitive: a full-width row, clip label on the left,
+// timestamp (Saira Condensed, accent) + play marker on the right.
 //
-// Phase 7: optional clipId/label. When omitted (legacy single-video reports
-// and single-clip sessions whose evidence has no references), onSeek is
-// called with undefined clipId and the player falls back to the one video —
-// exactly the pre-Phase-7 behavior. With a clipId, the label is shown so the
-// user knows which clip ("Watch Clip 2 · 00:11") and seeks that clip.
+// Parsing is centralized in parseTimestamp; if the timestamp is missing or
+// malformed it returns null and we render nothing rather than a broken row.
+//
+// Optional clipId/label. When omitted (legacy single-video reports and
+// single-clip sessions whose evidence has no references), onSeek is called
+// with undefined clipId and the player falls back to the one video.
 export default function WatchButton({
   timestamp,
   clipId,
@@ -23,13 +23,19 @@ export default function WatchButton({
   const seconds = parseTimestamp(timestamp);
   if (seconds === null) return null;
 
+  const clipShort = clipLabel ? clipLabel.split("—")[0].trim() : "Watch";
+
   return (
     <button
       type="button"
       onClick={() => onSeek(seconds, clipId)}
-      className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-border bg-surface-raised px-2.5 py-1 text-xs font-medium text-accent transition-colors hover:border-accent"
+      className="flex min-h-11 w-full items-center justify-between gap-3 rounded-btn border border-line bg-surface-2 px-3 transition-colors hover:border-accent"
     >
-      <span aria-hidden>▶</span> Watch {clipLabel ? `${clipLabel} · ${timestamp}` : timestamp}
+      <span className="text-sm font-semibold text-ink-soft">{clipShort}</span>
+      <span className="flex items-center gap-2 font-display text-sm font-bold text-accent">
+        {timestamp}
+        <span aria-hidden>▶</span>
+      </span>
     </button>
   );
 }

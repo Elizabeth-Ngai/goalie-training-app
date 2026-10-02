@@ -1,41 +1,62 @@
 @import "tailwindcss";
 
 :root {
-  --background: #0b0f17;
-  --surface: #131a26;
-  --surface-raised: #1a2332;
-  --border: #263042;
-  --foreground: #e7ebf3;
-  --muted: #8b96aa;
-  --accent: #f5a524;
-  --accent-foreground: #1a1206;
-  --good: #34d399;
-  --warn: #f5a524;
-  --bad: #f87171;
+  --ground: #0e1311;
+  --surface: #131a17;
+  --surface-2: #161d1a;
+  --line: #25302a;
+  --line-strong: #3a4740;
+  --ink: #eef2ee;
+  --ink-soft: #d3dbd6;
+  --muted: #a9b4ad;
+  --accent: #c6f24e;
+  --focus: #ffb27a;
+  --track: #2a3530;
+  /* Not in the Matchday spec's token list — added because destructive
+     actions and error states need a color and none of the specified
+     tokens fit that role (accent/focus are both already spoken for). */
+  --danger: #ff6b5e;
 }
 
 @theme inline {
-  --color-background: var(--background);
+  --color-ground: var(--ground);
   --color-surface: var(--surface);
-  --color-surface-raised: var(--surface-raised);
-  --color-border: var(--border);
-  --color-foreground: var(--foreground);
+  --color-surface-2: var(--surface-2);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
   --color-muted: var(--muted);
   --color-accent: var(--accent);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-good: var(--good);
-  --color-warn: var(--warn);
-  --color-bad: var(--bad);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-focus: var(--focus);
+  --color-track: var(--track);
+  --color-danger: var(--danger);
+
+  --radius-btn: 4px;
+  --radius-card: 6px;
+
+  --font-sans: var(--font-archivo);
+  --font-display: var(--font-saira);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
+  background: var(--ground);
+  color: var(--ink);
 }
 
 ::selection {
   background: var(--accent);
-  color: var(--accent-foreground);
+  color: var(--ground);
+}
+
+*:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
 }

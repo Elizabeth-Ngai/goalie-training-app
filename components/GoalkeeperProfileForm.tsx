@@ -6,6 +6,7 @@ import {
   GoalkeeperProfileDefaultsSchema,
   PLAYING_LEVELS,
 } from "@/lib/schemas";
+import { Button } from "@/components/ui/Button";
 
 const EQUIPMENT_OPTIONS = ["Cones", "Balls", "Goal", "Wall", "Gloves", "Resistance band"];
 const DURATION_OPTIONS = [30, 45, 60, 90];
@@ -63,15 +64,17 @@ export default function GoalkeeperProfileForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="rounded-xl border border-border bg-surface p-5">
-      <h2 className="font-semibold">Your Goalkeeper Profile</h2>
-      <p className="mt-1 text-sm text-muted">
-        These defaults prefill your training form each time you analyze a video.
-        Your per-session goal and available days are still chosen each time.
+    <form onSubmit={handleSubmit} className="rounded-card border border-line bg-surface p-5">
+      <h2 className="font-display text-xl font-extrabold tracking-tight text-ink uppercase">
+        Your Goalkeeper Profile
+      </h2>
+      <p className="mt-1 text-sm text-ink-soft">
+        These defaults prefill your training form each time you analyze a video. Your per-session
+        goal and available days are still chosen each time.
       </p>
 
       <div className="mt-4 grid gap-4 sm:grid-cols-2">
-        <label className="text-sm">
+        <label className="text-sm text-ink-soft">
           Age
           <input
             type="number"
@@ -79,18 +82,18 @@ export default function GoalkeeperProfileForm({
             max={60}
             value={age}
             onChange={(e) => setAge(e.target.value)}
-            className="mt-1 w-full rounded-lg border border-border bg-surface-raised px-3 py-2"
+            className="mt-1 w-full rounded-btn border border-line bg-surface-2 px-3 py-2 text-ink"
           />
         </label>
 
-        <label className="text-sm">
+        <label className="text-sm text-ink-soft">
           Playing level
           <select
             value={playingLevel}
             onChange={(e) =>
               setPlayingLevel(e.target.value as (typeof PLAYING_LEVELS)[number])
             }
-            className="mt-1 w-full rounded-lg border border-border bg-surface-raised px-3 py-2 capitalize"
+            className="mt-1 w-full rounded-btn border border-line bg-surface-2 px-3 py-2 text-ink capitalize"
           >
             {PLAYING_LEVELS.map((level) => (
               <option key={level} value={level}>
@@ -101,12 +104,12 @@ export default function GoalkeeperProfileForm({
         </label>
       </div>
 
-      <label className="mt-4 block text-sm">
+      <label className="mt-4 block text-sm text-ink-soft">
         Usual session duration
         <select
           value={sessionDurationMinutes}
           onChange={(e) => setSessionDurationMinutes(Number(e.target.value))}
-          className="mt-1 w-full rounded-lg border border-border bg-surface-raised px-3 py-2"
+          className="mt-1 w-full rounded-btn border border-line bg-surface-2 px-3 py-2 text-ink"
         >
           {DURATION_OPTIONS.map((minutes) => (
             <option key={minutes} value={minutes}>
@@ -117,17 +120,17 @@ export default function GoalkeeperProfileForm({
       </label>
 
       <div className="mt-4">
-        <p className="text-sm">Usual equipment</p>
+        <p className="text-sm text-ink-soft">Usual equipment</p>
         <div className="mt-2 flex flex-wrap gap-2">
           {EQUIPMENT_OPTIONS.map((item) => (
             <button
               key={item}
               type="button"
               onClick={() => toggleEquipment(item)}
-              className={`rounded-lg border px-3 py-1.5 text-sm ${
+              className={`min-h-11 rounded-btn border px-3 py-1.5 text-sm font-semibold transition-colors ${
                 equipment.includes(item)
-                  ? "border-accent bg-accent text-accent-foreground"
-                  : "border-border bg-surface-raised hover:border-accent"
+                  ? "border-accent bg-accent text-ground"
+                  : "border-line bg-surface-2 text-ink-soft hover:border-accent"
               }`}
             >
               {item}
@@ -136,7 +139,7 @@ export default function GoalkeeperProfileForm({
         </div>
       </div>
 
-      <label className="mt-4 flex items-center gap-2 text-sm">
+      <label className="mt-4 flex items-center gap-2 text-sm text-ink-soft">
         <input
           type="checkbox"
           checked={hasTrainingPartner}
@@ -145,15 +148,11 @@ export default function GoalkeeperProfileForm({
         I usually have a coach or training partner available
       </label>
 
-      {error && <p className="mt-4 text-sm text-bad">{error}</p>}
+      {error && <p className="mt-4 text-sm text-danger">{error}</p>}
 
-      <button
-        type="submit"
-        disabled={submitting}
-        className="mt-5 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground disabled:opacity-60"
-      >
+      <Button type="submit" disabled={submitting} className="mt-5">
         {submitting ? "Saving..." : "Save Profile"}
-      </button>
+      </Button>
     </form>
   );
 }

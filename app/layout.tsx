@@ -1,23 +1,26 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Saira_Condensed, Archivo } from "next/font/google";
 import Link from "next/link";
-import { ClerkProvider, Show, SignInButton, UserButton } from "@clerk/nextjs";
+import { ClerkProvider } from "@clerk/nextjs";
+import HeaderNav from "@/components/ui/HeaderNav";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const saira = Saira_Condensed({
+  weight: ["600", "700", "800"],
   subsets: ["latin"],
+  variable: "--font-saira",
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const archivo = Archivo({
+  weight: ["400", "500", "600", "700"],
   subsets: ["latin"],
+  variable: "--font-archivo",
 });
 
 export const metadata: Metadata = {
-  title: "Goalie Training App",
+  title: "Goalie Training",
   description:
-    "Upload goalkeeper training clips and get AI coaching feedback on positioning, footwork, diving, handling, and recovery — plus a personalized training plan.",
+    "Upload goalkeeper training clips and get coaching notes on positioning, footwork, diving, handling, and recovery — plus a personalized training plan.",
 };
 
 export default function RootLayout({
@@ -26,58 +29,40 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html
-      lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
-    >
-      <body className="min-h-full flex flex-col bg-background text-foreground">
-        <ClerkProvider>
-          <header className="border-b border-border">
-            <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
-              <Link href="/" className="flex items-center gap-2 font-semibold tracking-tight">
-                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-accent-foreground text-sm font-bold">
-                  GK
+    <html lang="en" className={`${saira.variable} ${archivo.variable} h-full antialiased`}>
+      <body className="flex min-h-full flex-col bg-ground text-ink">
+        <ClerkProvider
+          signInUrl="/sign-in"
+          signUpUrl="/sign-up"
+          appearance={{
+            variables: {
+              colorPrimary: "#c6f24e",
+              colorBackground: "#131a17",
+              colorForeground: "#eef2ee",
+              colorMutedForeground: "#a9b4ad",
+              colorInput: "#161d1a",
+              colorInputForeground: "#eef2ee",
+              colorBorder: "#25302a",
+              borderRadius: "4px",
+            },
+          }}
+        >
+          <header className="border-b border-line">
+            <div className="mx-auto flex h-[68px] max-w-6xl items-center justify-between px-4 sm:px-14">
+              <Link href="/" className="flex items-center gap-3">
+                <span aria-hidden className="h-[26px] w-[38px] border-t-[3px] border-r-[3px] border-l-[3px] border-accent" />
+                <span className="font-display text-lg font-extrabold tracking-wide text-ink uppercase">
+                  Goalie Training
                 </span>
-                <span>Goalie Training</span>
               </Link>
-              <nav className="flex items-center gap-6 text-sm text-muted">
-                <Link href="/" className="transition-colors hover:text-foreground">
-                  Home
-                </Link>
-                {/* History + Progress + Profile are only meaningful once
-                    signed in; the pages themselves also enforce auth via
-                    proxy.ts. */}
-                <Show when="signed-in">
-                  <Link href="/history" className="transition-colors hover:text-foreground">
-                    History
-                  </Link>
-                  <Link href="/progress" className="transition-colors hover:text-foreground">
-                    Progress
-                  </Link>
-                  <Link href="/profile" className="transition-colors hover:text-foreground">
-                    Profile
-                  </Link>
-                </Show>
-                <Link
-                  href="/analyze"
-                  className="rounded-lg bg-surface-raised px-3 py-1.5 font-medium text-foreground transition-colors hover:bg-border"
-                >
-                  Analyze a Video
-                </Link>
-                <Show when="signed-out">
-                  <SignInButton mode="modal" />
-                </Show>
-                <Show when="signed-in">
-                  <UserButton />
-                </Show>
-              </nav>
+              <HeaderNav />
             </div>
           </header>
 
           <div className="flex-1">{children}</div>
 
-          <footer className="border-t border-border">
-            <div className="mx-auto max-w-5xl px-6 py-6 text-sm text-muted">
+          <footer className="border-t border-line">
+            <div className="mx-auto max-w-6xl px-4 py-6 text-sm text-muted sm:px-14">
               Built for goalkeepers who want to train smarter, one clip at a time.
             </div>
           </footer>
