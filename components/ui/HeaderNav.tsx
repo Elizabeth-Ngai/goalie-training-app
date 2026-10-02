@@ -9,6 +9,14 @@ import { ButtonLink } from "@/components/ui/Button";
 const marketingLinkClass =
   "flex min-h-11 items-center px-3 text-sm font-semibold text-muted transition-colors hover:text-ink";
 
+const userButtonAppearance = {
+  elements: {
+    userButtonAvatarBox: "h-11 w-11",
+    userButtonPopoverActionButton__manageAccount: "text-white",
+    userButtonPopoverActionButton__signOut: "text-white",
+  },
+};
+
 export default function HeaderNav() {
   const [open, setOpen] = useState(false);
 
@@ -33,7 +41,7 @@ export default function HeaderNav() {
           <ButtonLink href="/analyze" variant="secondary">
             Upload clip
           </ButtonLink>
-          <UserButton appearance={{ elements: { userButtonAvatarBox: "h-11 w-11" } }} />
+          <UserButton appearance={userButtonAppearance} />
         </Show>
         <Show when="signed-out">
           <Link href="/sign-in" className={marketingLinkClass}>
@@ -85,7 +93,7 @@ export default function HeaderNav() {
               </Link>
               <div className="mt-2 flex items-center justify-between border-t border-line px-1 pt-3">
                 <span className="text-xs font-bold uppercase tracking-[0.12em] text-muted">Account</span>
-                <UserButton appearance={{ elements: { userButtonAvatarBox: "h-11 w-11" } }} />
+                <UserButton appearance={userButtonAppearance} />
               </div>
             </Show>
             <Show when="signed-out">
