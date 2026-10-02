@@ -19,7 +19,9 @@ const isProtectedPage = createRouteMatcher([
 
 export default clerkMiddleware(async (auth, req) => {
   if (isProtectedPage(req)) {
-    await auth.protect();
+    // Without this, protect() falls back to Clerk's hosted account-portal
+    // domain instead of our in-app /sign-in page.
+    await auth.protect({ unauthenticatedUrl: new URL("/sign-in", req.url).toString() });
   }
 });
 
