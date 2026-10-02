@@ -165,18 +165,36 @@ export default function AnalyzePage() {
     status: "analyzed" | "failed";
     report?: GoalieReportData;
   }> {
+    // Reuse prior work on retry: a clip already analyzed (e.g. when only the
+    // cross-clip synthesis failed) is returned as-is — no re-upload, no
+    // re-analysis. A clip that uploaded but failed analysis keeps its Blob
+    // URL and only re-runs analysis.
+    if (clip.status === "analyzed" && clip.report && clip.videoUrl) {
+      return {
+        clipId: clip.clipId,
+        videoFilename: clip.videoFilename,
+        videoUrl: clip.videoUrl,
+        status: "analyzed",
+        report: clip.report,
+      };
+    }
+
     updateClip(clip.clipId, { status: "uploading" });
     let videoUrl: string;
-    try {
-      const blob = await upload(clip.file.name, clip.file, {
-        access: "public",
-        handleUploadUrl: "/api/upload",
-      });
-      videoUrl = blob.url;
-    } catch {
-      // Upload failed — transient, no row will be persisted for this clip.
-      updateClip(clip.clipId, { status: "failed" });
-      return { clipId: clip.clipId, videoFilename: clip.videoFilename, status: "failed" };
+    if (clip.videoUrl) {
+      videoUrl = clip.videoUrl; // already uploaded on a previous attempt
+    } else {
+      try {
+        const blob = await upload(clip.file.name, clip.file, {
+          access: "public",
+          handleUploadUrl: "/api/upload",
+        });
+        videoUrl = blob.url;
+      } catch {
+        // Upload failed — transient, no row will be persisted for this clip.
+        updateClip(clip.clipId, { status: "failed" });
+        return { clipId: clip.clipId, videoFilename: clip.videoFilename, status: "failed" };
+      }
     }
 
     updateClip(clip.clipId, { status: "analyzing", videoUrl });

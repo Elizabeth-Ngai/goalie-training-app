@@ -129,6 +129,14 @@ const SYNTHESIS_TIMEOUT_MS = 28_000;
 // plan is a large structured output and needs both time and token headroom
 // to finish without truncating mid-JSON.
 const TRAINING_PLAN_TIMEOUT_MS = 52_000;
+// Phase 7 cross-clip synthesis is ALSO its own standalone request (own 60s
+// budget, no competing analysis/synthesis), so like the training plan it gets
+// most of that budget. Its output restates priorities/strengths/keyMoments/
+// technicalIssues for up to 5 clips, each now carrying an evidenceReferences
+// array — materially larger than a single-video synthesis, so it needs both
+// the bigger timeout and the bigger token cap below to avoid timing out or
+// truncating mid-JSON (which surfaced as "Couldn't combine your clips").
+const SESSION_SYNTHESIS_TIMEOUT_MS = 52_000;
 
 // Capping output length is the other half of bounding latency — generation
 // time scales with tokens produced. These are generous enough for a full
@@ -136,6 +144,7 @@ const TRAINING_PLAN_TIMEOUT_MS = 52_000;
 const ANALYSIS_MAX_TOKENS = 3000;
 const SYNTHESIS_MAX_TOKENS = 3000;
 const TRAINING_PLAN_MAX_TOKENS = 8000;
+const SESSION_SYNTHESIS_MAX_TOKENS = 8000;
 
 // Anthropic's client resolves credentials lazily (only throws once a request
 // is made), so it's safe to construct at module scope. OpenAI and
@@ -463,7 +472,7 @@ export async function callSessionSynthesis(
       {
         model: "gpt-5-mini",
         reasoning_effort: "minimal",
-        max_completion_tokens: SYNTHESIS_MAX_TOKENS,
+        max_completion_tokens: SESSION_SYNTHESIS_MAX_TOKENS,
         messages: [
           {
             role: "user",
@@ -491,7 +500,7 @@ export async function callSessionSynthesis(
           },
         },
       },
-      { timeout: SYNTHESIS_TIMEOUT_MS }
+      { timeout: SESSION_SYNTHESIS_TIMEOUT_MS }
     );
 
     const content = response.choices[0]?.message?.content;
