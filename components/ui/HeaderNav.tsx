@@ -12,8 +12,8 @@ const marketingLinkClass =
 const userButtonAppearance = {
   elements: {
     userButtonAvatarBox: "h-11 w-11",
-    userButtonPopoverActionButton__manageAccount: "text-white",
-    userButtonPopoverActionButton__signOut: "text-white",
+    userButtonPopoverActionButton__manageAccount: { color: "white" },
+    userButtonPopoverActionButton__signOut: { color: "white" },
   },
 };
 
