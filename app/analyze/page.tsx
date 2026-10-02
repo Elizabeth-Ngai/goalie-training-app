@@ -29,6 +29,7 @@ type ClipState = {
   status: ClipStatus;
   videoUrl?: string; // set once uploaded
   report?: GoalieReportData; // set once analyzed
+  error?: string; // why this clip failed (upload vs analysis + message)
 };
 
 // If a serverless function times out or crashes, Vercel returns a plain-text
@@ -179,7 +180,7 @@ export default function AnalyzePage() {
       };
     }
 
-    updateClip(clip.clipId, { status: "uploading" });
+    updateClip(clip.clipId, { status: "uploading", error: undefined });
     let videoUrl: string;
     if (clip.videoUrl) {
       videoUrl = clip.videoUrl; // already uploaded on a previous attempt
@@ -190,9 +191,10 @@ export default function AnalyzePage() {
           handleUploadUrl: "/api/upload",
         });
         videoUrl = blob.url;
-      } catch {
+      } catch (err) {
         // Upload failed — transient, no row will be persisted for this clip.
-        updateClip(clip.clipId, { status: "failed" });
+        const error = `Upload failed: ${(err as Error).message || "unknown error"}`;
+        updateClip(clip.clipId, { status: "failed", error });
         return { clipId: clip.clipId, videoFilename: clip.videoFilename, status: "failed" };
       }
     }
@@ -206,12 +208,15 @@ export default function AnalyzePage() {
         body: JSON.stringify({ frames }),
       });
       const { ok, data } = await parseJsonResponse(response);
-      if (!ok) throw new Error();
+      if (!ok) {
+        throw new Error((data.error as string) || `analysis request failed (${response.status})`);
+      }
       const clipReport = data.report as GoalieReportData;
-      updateClip(clip.clipId, { status: "analyzed", report: clipReport });
+      updateClip(clip.clipId, { status: "analyzed", report: clipReport, error: undefined });
       return { clipId: clip.clipId, videoFilename: clip.videoFilename, videoUrl, status: "analyzed", report: clipReport };
-    } catch {
-      updateClip(clip.clipId, { status: "failed", videoUrl });
+    } catch (err) {
+      const error = `Analysis failed: ${(err as Error).message || "unknown error"}`;
+      updateClip(clip.clipId, { status: "failed", videoUrl, error });
       return { clipId: clip.clipId, videoFilename: clip.videoFilename, videoUrl, status: "failed" };
     }
   }
@@ -497,23 +502,26 @@ export default function AnalyzePage() {
             {clips.map((clip, index) => (
               <li
                 key={clip.clipId}
-                className="flex items-center justify-between gap-3 rounded-lg border border-border bg-surface px-4 py-3 text-sm"
+                className="rounded-lg border border-border bg-surface px-4 py-3 text-sm"
               >
-                <span className="min-w-0 truncate">
-                  <span className="text-muted">Clip {index + 1} — </span>
-                  {clip.videoFilename}
-                </span>
-                <span
-                  className={`shrink-0 text-xs font-medium ${
-                    clip.status === "failed"
-                      ? "text-bad"
-                      : clip.status === "analyzed"
-                        ? "text-good"
-                        : "text-muted"
-                  }`}
-                >
-                  {CLIP_STATUS_LABEL[clip.status]}
-                </span>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="min-w-0 truncate">
+                    <span className="text-muted">Clip {index + 1} — </span>
+                    {clip.videoFilename}
+                  </span>
+                  <span
+                    className={`shrink-0 text-xs font-medium ${
+                      clip.status === "failed"
+                        ? "text-bad"
+                        : clip.status === "analyzed"
+                          ? "text-good"
+                          : "text-muted"
+                    }`}
+                  >
+                    {CLIP_STATUS_LABEL[clip.status]}
+                  </span>
+                </div>
+                {clip.error && <p className="mt-1 text-xs text-bad">{clip.error}</p>}
               </li>
             ))}
           </ul>
