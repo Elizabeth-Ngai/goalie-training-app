@@ -69,6 +69,29 @@ export const trainingDrillCompletions = pgTable(
   (table) => [unique().on(table.userId, table.analysisSessionId, table.drillId)]
 );
 
+// Multi-video clips (Phase 7). 0..N (really 1..5) clips per session. Only
+// successfully-UPLOADED clips get a row (video_url is NOT NULL — upload
+// failures stay transient UI state, never persisted). `status` distinguishes
+// 'analyzed' from uploaded-but-analysis-failed. `id` IS the clipId (a
+// client-generated correlation UUID); authorization is always via owning the
+// parent session, never via knowing a clipId. Legacy pre-Phase-7 sessions
+// have NO clip rows and fall back to the parent video_url/video_filename.
+export const analysisClips = pgTable(
+  "analysis_clips",
+  {
+    id: uuid("id").primaryKey(),
+    analysisSessionId: uuid("analysis_session_id")
+      .notNull()
+      .references(() => analysisSessions.id, { onDelete: "cascade" }),
+    videoUrl: text("video_url").notNull(),
+    videoFilename: text("video_filename").notNull(),
+    displayOrder: integer("display_order").notNull(),
+    status: text("status").notNull().default("analyzed"), // 'analyzed' | 'failed'
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("analysis_clips_session_idx").on(table.analysisSessionId, table.displayOrder)]
+);
+
 // Guarded: importable and safely exercisable with zero env vars set (local
 // dev without a provisioned database, or a build with no DATABASE_URL yet).
 // Every lib/sessions.ts / lib/profiles.ts / lib/trainingCompletions.ts
@@ -76,6 +99,6 @@ export const trainingDrillCompletions = pgTable(
 const connectionString = process.env.DATABASE_URL;
 export const db = connectionString
   ? drizzle(neon(connectionString), {
-      schema: { analysisSessions, goalkeeperProfiles, trainingDrillCompletions },
+      schema: { analysisSessions, goalkeeperProfiles, trainingDrillCompletions, analysisClips },
     })
   : null;

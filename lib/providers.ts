@@ -8,10 +8,16 @@
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 import { GoogleGenAI } from "@google/genai";
-import { formatTimestamp } from "@/lib/time";
-import { ANALYSIS_PROMPT, SYNTHESIS_PROMPT, TRAINING_PLAN_PROMPT } from "@/lib/prompts";
+import { formatTimestamp, parseTimestamp } from "@/lib/time";
+import {
+  ANALYSIS_PROMPT,
+  SESSION_SYNTHESIS_PROMPT,
+  SYNTHESIS_PROMPT,
+  TRAINING_PLAN_PROMPT,
+} from "@/lib/prompts";
 import type { AdaptiveTrainingContext } from "@/lib/adaptiveTraining";
 import {
+  EvidenceReference,
   GOALIE_REPORT_JSON_SCHEMA,
   GoalieReport,
   GoalieReportSchema,
@@ -22,6 +28,7 @@ import {
   ProviderId,
   ProviderResult,
   ReportPriority,
+  SESSION_GOALIE_REPORT_JSON_SCHEMA,
   TRAINING_PLAN_JSON_SCHEMA,
   TrainingPlan,
   TrainingPlanSchema,
@@ -360,6 +367,149 @@ export async function callSynthesis(
     return { ok: true, report };
   } catch (error) {
     console.error("[providers] synthesis: failed");
+    return { ok: false, error: (error as Error).message };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Phase 7: cross-clip session synthesis
+// ---------------------------------------------------------------------------
+
+export type SessionSynthesisClip = {
+  clipId: string;
+  clipLabel: string;
+  report: GoalieReport;
+};
+
+type RefItem = { timestamp: string; evidenceReferences?: EvidenceReference[] };
+
+// Every timestamp a clip's own report actually contains — the ONLY locations
+// session synthesis is allowed to cite for that clip. The model reasons over
+// these per-clip reports, not the raw video, so it must not invent a location.
+function suppliedTimestampsByClip(clips: SessionSynthesisClip[]): Map<string, Set<string>> {
+  const map = new Map<string, Set<string>>();
+  for (const clip of clips) {
+    const ts = new Set<string>();
+    for (const p of clip.report.topPriorities) ts.add(p.timestamp);
+    for (const s of clip.report.strengths) ts.add(s.timestamp);
+    for (const k of clip.report.keyMoments) ts.add(k.timestamp);
+    for (const t of clip.report.technicalIssues) ts.add(t.timestamp);
+    map.set(clip.clipId, ts);
+  }
+  return map;
+}
+
+// Drop any evidence reference unless ALL hold: clipId is a real supplied clip,
+// timestamp parses, AND that exact timestamp appears in that clip's supplied
+// report (can reason over evidence, cannot invent it). Then deterministically
+// normalize the legacy scalar `timestamp` to the first surviving reference
+// (never trusting the model to keep them in sync).
+function sanitizeRefItem<T extends RefItem>(item: T, suppliedByClip: Map<string, Set<string>>): T {
+  const refs = (item.evidenceReferences ?? []).filter(
+    (r) =>
+      suppliedByClip.has(r.clipId) &&
+      parseTimestamp(r.timestamp) !== null &&
+      suppliedByClip.get(r.clipId)!.has(r.timestamp)
+  );
+  return {
+    ...item,
+    evidenceReferences: refs,
+    timestamp: refs.length > 0 ? refs[0].timestamp : item.timestamp,
+  };
+}
+
+export function sanitizeEvidenceReferences(
+  report: GoalieReport,
+  suppliedByClip: Map<string, Set<string>>
+): GoalieReport {
+  return {
+    ...report,
+    topPriorities: report.topPriorities.map((p) => sanitizeRefItem(p, suppliedByClip)),
+    strengths: report.strengths.map((s) => sanitizeRefItem(s, suppliedByClip)),
+    keyMoments: report.keyMoments.map((k) => sanitizeRefItem(k, suppliedByClip)),
+    technicalIssues: report.technicalIssues.map((t) => sanitizeRefItem(t, suppliedByClip)),
+  };
+}
+
+// Deterministic (no LLM): give every finding of a single-clip report a single
+// evidence reference pointing at that clip, using the finding's own timestamp.
+// Used for the "multiple clips uploaded but only one analyzed" case so the
+// surviving clip's provenance is preserved rather than collapsing to a
+// legacy clip-less report.
+export function stampSingleClipProvenance(report: GoalieReport, clipId: string): GoalieReport {
+  const stamp = <T extends RefItem>(item: T): T => ({
+    ...item,
+    evidenceReferences: [{ clipId, timestamp: item.timestamp }],
+  });
+  return {
+    ...report,
+    topPriorities: report.topPriorities.map(stamp),
+    strengths: report.strengths.map(stamp),
+    keyMoments: report.keyMoments.map(stamp),
+    technicalIssues: report.technicalIssues.map(stamp),
+  };
+}
+
+// Cross-clip synthesis: merge 2+ already-synthesized per-clip reports into ONE
+// session report whose evidence is attributed to supporting clips. Text-only
+// (no images), so it's fast and its input is bounded to <=5 compact reports.
+export async function callSessionSynthesis(
+  clips: SessionSynthesisClip[]
+): Promise<{ ok: true; report: GoalieReport } | { ok: false; error: string }> {
+  try {
+    const openai = new OpenAI({ maxRetries: 0 });
+
+    const response = await openai.chat.completions.create(
+      {
+        model: "gpt-5-mini",
+        reasoning_effort: "minimal",
+        max_completion_tokens: SYNTHESIS_MAX_TOKENS,
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: SESSION_SYNTHESIS_PROMPT },
+              {
+                type: "text",
+                text: JSON.stringify({
+                  clips: clips.map((c) => ({
+                    clipId: c.clipId,
+                    clipLabel: c.clipLabel,
+                    report: c.report,
+                  })),
+                }),
+              },
+            ],
+          },
+        ],
+        response_format: {
+          type: "json_schema",
+          json_schema: {
+            name: "session_goalie_report",
+            schema: SESSION_GOALIE_REPORT_JSON_SCHEMA,
+            strict: true,
+          },
+        },
+      },
+      { timeout: SYNTHESIS_TIMEOUT_MS }
+    );
+
+    const content = response.choices[0]?.message?.content;
+    if (!content) throw new Error("No content in session synthesis response");
+
+    const parsed = GoalieReportSchema.safeParse(JSON.parse(content));
+    if (!parsed.success) throw new Error("Malformed session synthesis response");
+
+    const suppliedByClip = suppliedTimestampsByClip(clips);
+    const report = sanitizeEvidenceReferences(
+      { ...parsed.data, topPriorities: normalizePriorityIds(parsed.data.topPriorities) },
+      suppliedByClip
+    );
+
+    console.log("[providers] session-synthesis: ok");
+    return { ok: true, report };
+  } catch (error) {
+    console.error("[providers] session-synthesis: failed");
     return { ok: false, error: (error as Error).message };
   }
 }

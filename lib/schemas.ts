@@ -47,6 +47,28 @@ const DRILL_SUGGESTION_JSON_SCHEMA = {
   additionalProperties: false,
 };
 
+// Phase 7: a single video-evidence location — WHICH clip + WHAT timestamp.
+// Pre-Phase-7 reports have only a scalar `timestamp` and no references; the
+// `evidenceReferences` field below is optional everywhere so they still
+// parse. A multi-clip synthesized finding carries one reference per
+// supporting clip, so "this pattern appeared across Clip 1, 2 and 4" is
+// retained and each reference is independently Watch-able.
+export const EvidenceReferenceSchema = z.object({
+  clipId: z.string(),
+  timestamp: z.string(),
+});
+export type EvidenceReference = z.infer<typeof EvidenceReferenceSchema>;
+
+const EVIDENCE_REFERENCE_JSON_SCHEMA = {
+  type: "object",
+  properties: {
+    clipId: { type: "string" },
+    timestamp: { type: "string" },
+  },
+  required: ["clipId", "timestamp"],
+  additionalProperties: false,
+};
+
 export const KeyMomentSchema = z.object({
   timestamp: z.string(),
   description: z.string(),
@@ -93,6 +115,10 @@ export const TechnicalIssueItemSchema = z.object({
   whyItMatters: z.string(),
   recommendation: z.string(),
   confidence: ConfidenceLevelSchema,
+  // Phase 7 clip provenance (optional for backward compat; populated only
+  // in multi-clip session reports). Persisted in GoalieReport.technicalIssues,
+  // so it must not be left clip-ambiguous in a multi-clip report.
+  evidenceReferences: z.array(EvidenceReferenceSchema).optional(),
 });
 export type TechnicalIssueItem = z.infer<typeof TechnicalIssueItemSchema>;
 
@@ -142,6 +168,7 @@ export const ReportPrioritySchema = z.object({
   whyItMatters: z.array(z.string()),
   howToImprove: z.array(z.string()),
   recommendedDrill: DrillSuggestionSchema,
+  evidenceReferences: z.array(EvidenceReferenceSchema).optional(), // Phase 7 clip provenance
 });
 export type ReportPriority = z.infer<typeof ReportPrioritySchema>;
 
@@ -175,6 +202,7 @@ export const ReportStrengthSchema = z.object({
   category: RubricCategorySchema,
   timestamp: z.string(),
   points: z.array(z.string()),
+  evidenceReferences: z.array(EvidenceReferenceSchema).optional(), // Phase 7 clip provenance
 });
 export type ReportStrength = z.infer<typeof ReportStrengthSchema>;
 
@@ -194,6 +222,7 @@ export const ReportKeyMomentSchema = z.object({
   timestamp: z.string(),
   label: z.string(),
   description: z.string(),
+  evidenceReferences: z.array(EvidenceReferenceSchema).optional(), // Phase 7 clip provenance
 });
 export type ReportKeyMoment = z.infer<typeof ReportKeyMomentSchema>;
 
@@ -264,6 +293,52 @@ export const GOALIE_REPORT_JSON_SCHEMA = {
     technicalIssues: { type: "array", items: TECHNICAL_ISSUE_ITEM_JSON_SCHEMA },
     topPriorities: { type: "array", items: REPORT_PRIORITY_JSON_SCHEMA },
     keyMoments: { type: "array", items: REPORT_KEY_MOMENT_JSON_SCHEMA },
+    recommendedDrills: { type: "array", items: DRILL_SUGGESTION_JSON_SCHEMA },
+    sourceCount: { type: "integer", enum: [1, 2, 3] },
+  },
+  required: [
+    "summary",
+    "strengths",
+    "technicalIssues",
+    "topPriorities",
+    "keyMoments",
+    "recommendedDrills",
+    "sourceCount",
+  ],
+  additionalProperties: false,
+};
+
+// Phase 7 session-synthesis output schema. Identical to GOALIE_REPORT_JSON_
+// SCHEMA except the four persisted, timestamp-bearing evidence types REQUIRE
+// an `evidenceReferences` array so the cross-clip model must attribute every
+// finding to its supporting clip(s). The per-clip /api/analyze-video pipeline
+// keeps using GOALIE_REPORT_JSON_SCHEMA unchanged (scalar timestamps only);
+// only callSessionSynthesis uses this one. Built by spreading the base item
+// schemas so the two stay in sync.
+function withEvidenceReferences(base: {
+  type: string;
+  properties: Record<string, unknown>;
+  required: string[];
+  additionalProperties: boolean;
+}) {
+  return {
+    ...base,
+    properties: {
+      ...base.properties,
+      evidenceReferences: { type: "array", items: EVIDENCE_REFERENCE_JSON_SCHEMA },
+    },
+    required: [...base.required, "evidenceReferences"],
+  };
+}
+
+export const SESSION_GOALIE_REPORT_JSON_SCHEMA = {
+  type: "object",
+  properties: {
+    summary: { type: "string" },
+    strengths: { type: "array", items: withEvidenceReferences(REPORT_STRENGTH_JSON_SCHEMA) },
+    technicalIssues: { type: "array", items: withEvidenceReferences(TECHNICAL_ISSUE_ITEM_JSON_SCHEMA) },
+    topPriorities: { type: "array", items: withEvidenceReferences(REPORT_PRIORITY_JSON_SCHEMA) },
+    keyMoments: { type: "array", items: withEvidenceReferences(REPORT_KEY_MOMENT_JSON_SCHEMA) },
     recommendedDrills: { type: "array", items: DRILL_SUGGESTION_JSON_SCHEMA },
     sourceCount: { type: "integer", enum: [1, 2, 3] },
   },
@@ -421,13 +496,35 @@ export const TrainingPlanRequestSchema = z.object({
 });
 
 // ---------------------------------------------------------------------------
-// (d) Analysis session persistence (Phase 3)
+// (d) Analysis session persistence (Phase 3 + Phase 7 clips)
 // ---------------------------------------------------------------------------
+
+// Centralized Phase 7 limits (enforced BOTH client-side for UX and
+// server-side for cost/security — never trust the client's cap).
+export const MAX_CLIPS_PER_SESSION = 5;
+export const MAX_CONCURRENT_CLIP_ANALYSES = 2;
+
+export const CLIP_STATUSES = ["analyzed", "failed"] as const;
+export const ClipStatusSchema = z.enum(CLIP_STATUSES);
+export type ClipStatus = z.infer<typeof ClipStatusSchema>;
+
+// One persisted clip within a session. Only successfully-UPLOADED clips get a
+// row (upload failures are transient UI state, never persisted — video_url is
+// NOT NULL). `status` distinguishes analyzed vs uploaded-but-analysis-failed.
+export const SessionClipInputSchema = z.object({
+  clipId: z.uuid(),
+  videoUrl: z.url(),
+  videoFilename: z.string().min(1),
+  displayOrder: z.number().int().min(0),
+  status: ClipStatusSchema,
+});
+export type SessionClipInput = z.infer<typeof SessionClipInputSchema>;
 
 export const CreateSessionRequestSchema = z.object({
   id: z.uuid(),
-  videoUrl: z.url(),
-  videoFilename: z.string().min(1),
+  // 1..MAX clips. Single-video sends a one-element array. Ordering is carried
+  // by each clip's displayOrder, not array position.
+  clips: z.array(SessionClipInputSchema).min(1).max(MAX_CLIPS_PER_SESSION),
   report: GoalieReportSchema,
 });
 export type CreateSessionRequest = z.infer<typeof CreateSessionRequestSchema>;
@@ -481,3 +578,25 @@ export const DeleteCompletionRequestSchema = z.object({
   drillId: z.string().min(1),
 });
 export type DeleteCompletionRequest = z.infer<typeof DeleteCompletionRequestSchema>;
+
+// ---------------------------------------------------------------------------
+// (g) Multi-clip session synthesis (Phase 7)
+// ---------------------------------------------------------------------------
+
+// One successful per-clip report fed into cross-clip synthesis. `report` is a
+// full per-clip GoalieReport (scalar timestamps, no evidenceReferences).
+// `clipLabel` is a short human label ("Clip 2 — cross.mp4") given to the
+// model for readable provenance; bounded to keep the request small.
+export const SynthesisClipInputSchema = z.object({
+  clipId: z.uuid(),
+  clipLabel: z.string().min(1).max(80),
+  report: GoalieReportSchema,
+});
+export type SynthesisClipInput = z.infer<typeof SynthesisClipInputSchema>;
+
+// Bounded server-side (never trust the client cap): 1..MAX per-clip reports.
+// 1 report is allowed but the route short-circuits (stamp provenance, no AI).
+export const SynthesizeSessionRequestSchema = z.object({
+  clips: z.array(SynthesisClipInputSchema).min(1).max(MAX_CLIPS_PER_SESSION),
+});
+export type SynthesizeSessionRequest = z.infer<typeof SynthesizeSessionRequestSchema>;

@@ -1,5 +1,5 @@
 import { GoalieReport as GoalieReportData } from "@/lib/schemas";
-import WatchButton from "@/components/WatchButton";
+import EvidenceWatch from "@/components/EvidenceWatch";
 
 function BulletList({
   items,
@@ -26,9 +26,14 @@ function BulletList({
 export default function GoalieReport({
   report,
   onSeek,
+  clipLabels,
 }: {
   report: GoalieReportData;
-  onSeek: (seconds: number) => void;
+  onSeek: (seconds: number, clipId?: string) => void;
+  // clipId -> "Clip N — filename" for multi-clip sessions. Omitted for
+  // legacy/single-video reports, where evidence has no references and
+  // EvidenceWatch falls back to a single clip-less Watch button.
+  clipLabels?: Record<string, string>;
 }) {
   return (
     <div className="space-y-6">
@@ -56,7 +61,12 @@ export default function GoalieReport({
                 <h3 className="text-base font-semibold">
                   {index + 1}. {priority.title}
                 </h3>
-                <WatchButton timestamp={priority.timestamp} onSeek={onSeek} />
+                <EvidenceWatch
+                  timestamp={priority.timestamp}
+                  evidenceReferences={priority.evidenceReferences}
+                  clipLabels={clipLabels}
+                  onSeek={onSeek}
+                />
               </div>
 
               <div className="mt-3 space-y-3">
@@ -104,7 +114,12 @@ export default function GoalieReport({
                     </span>
                     {strength.title}
                   </p>
-                  <WatchButton timestamp={strength.timestamp} onSeek={onSeek} />
+                  <EvidenceWatch
+                    timestamp={strength.timestamp}
+                    evidenceReferences={strength.evidenceReferences}
+                    clipLabels={clipLabels}
+                    onSeek={onSeek}
+                  />
                 </div>
                 <BulletList items={strength.points} className="mt-1" />
               </li>
@@ -124,7 +139,12 @@ export default function GoalieReport({
                 className="border-t border-border pt-4 first:border-t-0 first:pt-0"
               >
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-                  <WatchButton timestamp={moment.timestamp} onSeek={onSeek} />
+                  <EvidenceWatch
+                    timestamp={moment.timestamp}
+                    evidenceReferences={moment.evidenceReferences}
+                    clipLabels={clipLabels}
+                    onSeek={onSeek}
+                  />
                   {moment.label && (
                     <span className="text-sm font-medium">{moment.label}</span>
                   )}

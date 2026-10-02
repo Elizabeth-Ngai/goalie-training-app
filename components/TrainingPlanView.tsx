@@ -9,7 +9,7 @@ import {
   firstSelectableDayIndex,
   sumTrainingMinutes,
 } from "@/lib/trainingPlanStats";
-import WatchButton from "@/components/WatchButton";
+import EvidenceWatch from "@/components/EvidenceWatch";
 
 function StatTile({ value, label }: { value: string | number; label: string }) {
   return (
@@ -162,12 +162,14 @@ function DrillCard({
   drill,
   priorities,
   onSeek,
+  clipLabels,
   completionStatus,
   onSetCompletionStatus,
 }: {
   drill: TrainingDrill;
   priorities: ReportPriority[];
-  onSeek: (seconds: number) => void;
+  onSeek: (seconds: number, clipId?: string) => void;
+  clipLabels?: Record<string, string>;
   completionStatus?: "completed" | "skipped";
   onSetCompletionStatus?: (drillId: string, status: "completed" | "skipped" | null) => void;
 }) {
@@ -191,7 +193,12 @@ function DrillCard({
             <span className="font-semibold uppercase tracking-wide">Addresses </span>
             {linkedPriority.title}
           </p>
-          <WatchButton timestamp={linkedPriority.timestamp} onSeek={onSeek} />
+          <EvidenceWatch
+            timestamp={linkedPriority.timestamp}
+            evidenceReferences={linkedPriority.evidenceReferences}
+            clipLabels={clipLabels}
+            onSeek={onSeek}
+          />
         </div>
       )}
 
@@ -246,12 +253,14 @@ function DayDetail({
   day,
   priorities,
   onSeek,
+  clipLabels,
   completions,
   onSetCompletionStatus,
 }: {
   day: TrainingDay;
   priorities: ReportPriority[];
-  onSeek: (seconds: number) => void;
+  onSeek: (seconds: number, clipId?: string) => void;
+  clipLabels?: Record<string, string>;
   completions?: Record<string, "completed" | "skipped">;
   onSetCompletionStatus?: (drillId: string, status: "completed" | "skipped" | null) => void;
 }) {
@@ -277,6 +286,7 @@ function DayDetail({
               drill={drill}
               priorities={priorities}
               onSeek={onSeek}
+              clipLabels={clipLabels}
               completionStatus={drill.drillId ? completions?.[drill.drillId] : undefined}
               onSetCompletionStatus={onSetCompletionStatus}
             />
@@ -291,13 +301,16 @@ export default function TrainingPlanView({
   plan,
   priorities,
   onSeek,
+  clipLabels,
   completions,
   onSetCompletionStatus,
   adaptationNotes,
 }: {
   plan: TrainingPlan;
   priorities: ReportPriority[];
-  onSeek: (seconds: number) => void;
+  onSeek: (seconds: number, clipId?: string) => void;
+  // clipId -> label for multi-clip drill Watch chips; omitted for legacy.
+  clipLabels?: Record<string, string>;
   // Completion tracking (Phase 6) — all optional, so an un-wired caller
   // (or a historical plan whose drills have no drillId) renders a clean,
   // read-only plan exactly as before.
@@ -343,6 +356,7 @@ export default function TrainingPlanView({
           day={selectedDay}
           priorities={priorities}
           onSeek={onSeek}
+          clipLabels={clipLabels}
           completions={completions}
           onSetCompletionStatus={onSetCompletionStatus}
         />

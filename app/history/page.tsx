@@ -20,7 +20,9 @@ function SessionCard({ item }: { item: SessionListItem }) {
             day: "numeric",
           })}
         </p>
-        <p className="mt-1 font-semibold">{item.videoFilename}</p>
+        <p className="mt-1 font-semibold">
+          {item.clipCount > 1 ? `${item.clipCount} clips` : item.videoFilename}
+        </p>
 
         {item.report.valid ? (
           <div className="mt-3 space-y-1 text-sm">

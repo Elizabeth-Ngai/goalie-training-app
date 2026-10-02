@@ -9,13 +9,15 @@
 // behavior — a missing DATABASE_URL in production should fail loudly, not
 // quietly run with history disabled. That visibility mechanism isn't built
 // in this phase; this comment is the flag for it.
-import { and, desc, eq, ne, sql } from "drizzle-orm";
-import { analysisSessions, db } from "@/lib/db";
+import { and, asc, desc, eq, inArray, ne, sql } from "drizzle-orm";
+import { analysisClips, analysisSessions, db } from "@/lib/db";
 import {
+  ClipStatus,
   GoalieReport,
   GoalieReportSchema,
   PlayerInfo,
   PlayerInfoSchema,
+  SessionClipInput,
   TrainingPlan,
   TrainingPlanSchema,
 } from "@/lib/schemas";
@@ -31,10 +33,22 @@ function toValidated<T>(parsed: { success: boolean; data?: T }): Validated<T> {
   return parsed.success ? { valid: true, data: parsed.data as T } : { valid: false };
 }
 
+// A persisted clip of a session (Phase 7). For a legacy pre-Phase-7 session
+// with no clip rows, getAnalysisSession synthesizes a single clip from the
+// parent video_url/video_filename so every session has at least one.
+export type SessionClip = {
+  clipId: string;
+  videoUrl: string;
+  videoFilename: string;
+  displayOrder: number;
+  status: ClipStatus;
+};
+
 export type SessionListItem = {
   id: string;
   createdAt: Date;
-  videoFilename: string;
+  videoFilename: string; // the primary (first analyzed) clip's filename
+  clipCount: number; // 0 for legacy single-video rows (treat as 1 implicit clip)
   report: Validated<GoalieReport>;
   hasTrainingPlan: boolean;
   trainingDayCount: number | null;
@@ -44,8 +58,11 @@ export type SessionDetail = {
   id: string;
   createdAt: Date;
   updatedAt: Date;
-  videoUrl: string;
+  videoUrl: string; // primary/legacy compatibility video
   videoFilename: string;
+  clips: SessionClip[]; // ordered by displayOrder; >=1 (synthesized for legacy)
+  uploadedClipCount: number;
+  analyzedClipCount: number;
   report: Validated<GoalieReport>;
   playerInfo: Validated<PlayerInfo> | null; // null = no plan attempted yet
   trainingPlan: Validated<TrainingPlan> | null; // null = no plan attempted yet
@@ -54,34 +71,39 @@ export type SessionDetail = {
 export async function createAnalysisSession(input: {
   id: string;
   userId: string;
-  videoUrl: string;
-  videoFilename: string;
+  clips: SessionClipInput[];
   report: GoalieReport;
 }): Promise<DbResult<{ id: string }>> {
   if (!db) return { ok: false, error: "Database is not configured." };
+  if (input.clips.length === 0) return { ok: false, error: "A session needs at least one clip." };
   try {
-    // Upsert keyed on the client-generated id: a retried save after a network
-    // timeout re-applies the same analysis data rather than risking a
-    // duplicate row. Deliberately omits player_info/training_plan from the
-    // update set so a replayed create can never clobber a plan attached in
-    // between by a later PATCH. The setWhere ownership guard means a (vanishingly
-    // unlikely) id collision from a different user can never overwrite their
-    // row — the update only applies to the caller's own row.
+    // Parent video_url/video_filename are legacy/compatibility fields — set
+    // them to a representative SUCCESSFUL clip, never blindly clips[0] (which
+    // might be the one that failed analysis). display_order is untouched by
+    // this choice (the clip rows below keep the user's original order).
+    const primaryClip = input.clips.find((c) => c.status === "analyzed") ?? input.clips[0];
+
+    // Upsert the parent keyed on the client-generated id: a retried save after
+    // a network timeout re-applies the same data rather than duplicating a
+    // row. Deliberately omits player_info/training_plan from the update set so
+    // a replayed create can never clobber a plan attached by a later PATCH.
+    // The setWhere ownership guard means an id collision from another user can
+    // never overwrite their row.
     const rows = await db
       .insert(analysisSessions)
       .values({
         id: input.id,
         userId: input.userId,
-        videoUrl: input.videoUrl,
-        videoFilename: input.videoFilename,
+        videoUrl: primaryClip.videoUrl,
+        videoFilename: primaryClip.videoFilename,
         report: input.report,
         schemaVersion: 1,
       })
       .onConflictDoUpdate({
         target: analysisSessions.id,
         set: {
-          videoUrl: input.videoUrl,
-          videoFilename: input.videoFilename,
+          videoUrl: primaryClip.videoUrl,
+          videoFilename: primaryClip.videoFilename,
           report: input.report,
           updatedAt: new Date(),
         },
@@ -89,10 +111,37 @@ export async function createAnalysisSession(input: {
       })
       .returning({ id: analysisSessions.id });
 
-    // No returned row => the id exists but is owned by someone else (the
-    // setWhere blocked the update). Treat as a failure rather than silently
-    // succeeding without persisting.
+    // No returned row => the id exists but is owned by someone else (setWhere
+    // blocked it). Fail rather than writing clips under a session we don't own.
     if (!rows[0]) return { ok: false, error: "Session id conflict." };
+
+    // Upsert clip rows (idempotent on the clip's own UUID PK, so a retried
+    // save re-applies the same rows). Clips are owned transitively via the
+    // parent session verified above. No transaction wrapper: on a partial
+    // failure the client's existing retry re-runs both steps idempotently —
+    // same fire-and-forget resilience as the rest of persistence.
+    for (const clip of input.clips) {
+      await db
+        .insert(analysisClips)
+        .values({
+          id: clip.clipId,
+          analysisSessionId: input.id,
+          videoUrl: clip.videoUrl,
+          videoFilename: clip.videoFilename,
+          displayOrder: clip.displayOrder,
+          status: clip.status,
+        })
+        .onConflictDoUpdate({
+          target: analysisClips.id,
+          set: {
+            videoUrl: clip.videoUrl,
+            videoFilename: clip.videoFilename,
+            displayOrder: clip.displayOrder,
+            status: clip.status,
+          },
+        });
+    }
+
     return { ok: true, data: { id: rows[0].id } };
   } catch (error) {
     console.error("[sessions] create: failed");
@@ -142,6 +191,37 @@ export async function getAnalysisSession(
     const row = rows[0];
     if (!row) return { ok: true, data: null };
 
+    // Fetch this session's clip rows (ownership already proven by the parent
+    // query above — clips belong to the owned session). Legacy sessions have
+    // none: synthesize a single clip from the parent columns so every session
+    // has >=1 clip and the player always has something to show.
+    const clipRows = await db
+      .select()
+      .from(analysisClips)
+      .where(eq(analysisClips.analysisSessionId, id))
+      .orderBy(asc(analysisClips.displayOrder));
+
+    const clips: SessionClip[] =
+      clipRows.length > 0
+        ? clipRows.map((c) => ({
+            clipId: c.id,
+            videoUrl: c.videoUrl,
+            videoFilename: c.videoFilename,
+            displayOrder: c.displayOrder,
+            status: (c.status === "failed" ? "failed" : "analyzed") as ClipStatus,
+          }))
+        : [
+            {
+              clipId: row.id, // legacy: synthetic single clip; evidence has no refs so this id is never matched
+              videoUrl: row.videoUrl,
+              videoFilename: row.videoFilename,
+              displayOrder: 0,
+              status: "analyzed",
+            },
+          ];
+
+    const analyzedClipCount = clips.filter((c) => c.status === "analyzed").length;
+
     return {
       ok: true,
       data: {
@@ -150,6 +230,9 @@ export async function getAnalysisSession(
         updatedAt: row.updatedAt,
         videoUrl: row.videoUrl,
         videoFilename: row.videoFilename,
+        clips,
+        uploadedClipCount: clips.length,
+        analyzedClipCount,
         report: toValidated(GoalieReportSchema.safeParse(row.report)),
         playerInfo: row.playerInfo === null ? null : toValidated(PlayerInfoSchema.safeParse(row.playerInfo)),
         trainingPlan:
@@ -189,12 +272,29 @@ export async function listAnalysisSessions(opts: {
       .limit(opts.limit ?? 50)
       .offset(opts.offset ?? 0);
 
+    // Clip counts in ONE grouped query over just the listed sessions (no N+1).
+    // Legacy single-video rows have no clip rows -> absent from the map -> 0
+    // (the card treats 0 as a single implicit clip and shows the filename).
+    const clipCountById = new Map<string, number>();
+    if (rows.length > 0) {
+      const counts = await db
+        .select({
+          analysisSessionId: analysisClips.analysisSessionId,
+          count: sql<number>`count(*)::int`,
+        })
+        .from(analysisClips)
+        .where(inArray(analysisClips.analysisSessionId, rows.map((r) => r.id)))
+        .groupBy(analysisClips.analysisSessionId);
+      for (const c of counts) clipCountById.set(c.analysisSessionId, Number(c.count));
+    }
+
     return {
       ok: true,
       data: rows.map((row) => ({
         id: row.id,
         createdAt: row.createdAt,
         videoFilename: row.videoFilename,
+        clipCount: clipCountById.get(row.id) ?? 0,
         report: toValidated(GoalieReportSchema.safeParse(row.report)),
         hasTrainingPlan: Boolean(row.hasTrainingPlan),
         trainingDayCount: row.trainingDayCount ?? null,
